@@ -112,6 +112,52 @@ Single class design: `sdFormat::SectorWriter`
 - 2-space indentation for nested list items
 - Blank lines before and after headers and lists
 
+## Documentation Standards
+
+- Reference docs should build from fundamentals: define basic
+  concepts (sector, LBA, CHS) before using them in structure
+  definitions.
+- Formulas must use descriptive variable names, never opaque
+  temporaries (`tmpVal1`). If transcribing a spec formula,
+  rename its variables and explain the original reasoning.
+- Every on-disk structure written by `SectorWriter` must be
+  documented in `canonical_file_system.md`, including backup
+  copies (backup VBR, backup FSInfo, backup FAT).
+- When a spec uses magic constants (e.g., `256`, `/ 2`),
+  explain the derivation in terms of byte sizes and entry
+  counts so the reader can verify the arithmetic.
+
+## Canonical Naming
+
+`docs/canonical_file_system.md` is the authoritative reference for
+on-disk field names. All struct fields in `SectorWriter.cpp` should
+follow the canonical names defined there.
+
+Key terminology:
+
+- **VBR** (Volume Boot Record) = the entire first sector of the
+  partition (also called "boot sector" or "0th sector").
+- **BPB** (BIOS Parameter Block) = the sub-structure *within* the
+  VBR that describes volume geometry (offsets 0x00B–0x033).
+- Use `VBR_` prefix for boot sector fields outside the BPB (the MS
+  spec uses `BS_`, but `VBR_` is clearer and avoids the `BS_`/`BPB_`
+  visual collision).
+- Prefixes: `MBR_`, `PE_`, `VBR_`, `BPB_`, `FSI_`, `DIR_`.
+
+Reference documents in `docs/`:
+
+- `canonical_file_system.md` — harmonized field name mapping
+  (single source of truth for all on-disk names)
+- `mbr_x86_design.md` — MBR bootstrap and partition table
+  reference (from OSDev Wiki / IBM PC/AT)
+- `microsoft_fat_specification.md` — MS FAT spec (August 2005)
+- `fat_file_system_design.md` — Wikipedia design reference
+
+When adding or updating reference docs, always include a
+"Derived from" section listing source material. Cross-reference
+canonical names from `canonical_file_system.md` wherever
+applicable so the docs stay connected.
+
 ## Key Technical Details
 
 - Cluster size is always 32KB (critical for DS flashcart compatibility)
