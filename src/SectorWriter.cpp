@@ -20,7 +20,7 @@ namespace sdFormat {
 static constexpr uint16_t kMbrSignature = 0xAA55;
 static constexpr uint8_t kPartitionTypeFat32Lba = 0x0C;
 static constexpr uint32_t kMbrBootstrapSize = 446;
-static constexpr uint16_t kFat32Signature = 0xAA55;
+static constexpr uint16_t kVbrSignature = 0xAA55;
 static constexpr uint8_t kAttrVolumeId = 0x08;
 
 struct PartitionEntry {
@@ -43,30 +43,42 @@ static constexpr uint8_t kMediaDescriptor = 0xF8;
 static constexpr uint32_t kFsInfoSector = 1;
 static constexpr uint32_t kBackupBootSector = 6;
 
-struct FAT32BootSector {
-  const std::array<uint8_t, 3> jmpBoot{0xEB, 0x58, 0x90};
-  const std::array<char, 8> oemName{'M', 'S', 'W', 'I', 'N', '4', '.', '1'};
+struct BiosParameterBlock {
+  // Common BPB (0x00B–0x023)
   const uint16_t bytesPerSector{SectorWriter::kSectorSize};
   const uint8_t sectorsPerCluster{SectorWriter::kSectorsPerCluster};
-  const uint16_t reservedSectors{SectorWriter::kReservedSectors};
+  const uint16_t reservedSectorCount{SectorWriter::kReservedSectors};
   const uint8_t fatCount{SectorWriter::kNumberFats};
   const uint16_t rootEntryCount{0};
   const uint16_t totalSectors16{0};
-  const uint8_t media{kMediaDescriptor};
+  const uint8_t mediaDescriptor{kMediaDescriptor};
   const uint16_t fatSize16{0};
   const uint16_t sectorsPerTrack{63};
   const uint16_t headCount{255};
   const uint32_t hiddenSectors{SectorWriter::kPartitionAlignmentSectors};
   const uint32_t totalSectors32;
 
+  // FAT32 Extended BPB (0x024–0x03F)
   const uint32_t fatSize32;
   const uint16_t extFlags{0};
   const uint16_t fsVersion{0};
   const uint32_t rootCluster{kRootCluster};
   const uint16_t fsInfoSector{kFsInfoSector};
   const uint16_t backupBootSector{kBackupBootSector};
-
   const std::array<std::byte, 12> reserved{};
+} __attribute__((packed));
+static_assert(sizeof(BiosParameterBlock) == 53,
+              "BiosParameterBlock must be 53 bytes");
+
+struct VolumeBootRecord {
+  // VBR header (0x000–0x00A)
+  const std::array<uint8_t, 3> jmpBoot{0xEB, 0x58, 0x90};
+  const std::array<char, 8> oemName{'M', 'S', 'W', 'I', 'N', '4', '.', '1'};
+
+  // BPB (0x00B–0x03F)
+  const BiosParameterBlock bpb;
+
+  // VBR fields outside BPB (0x040–0x059)
   const uint8_t driveNumber{0x80};
   const uint8_t reserved1{0};
   const uint8_t bootSignature{0x29};
@@ -74,11 +86,12 @@ struct FAT32BootSector {
   const std::array<char, 11> volumeLabel;
   const std::array<char, 8> fsType{'F', 'A', 'T', '3', '2', ' ', ' ', ' '};
 
+  // VBR tail (0x05A–0x1FF)
   const std::array<std::byte, 420> bootCode{};
-  const uint16_t signature{kFat32Signature};
+  const uint16_t signature{kVbrSignature};
 } __attribute__((packed));
-static_assert(sizeof(FAT32BootSector) == 512,
-              "FAT32BootSector must be 512 bytes");
+static_assert(sizeof(VolumeBootRecord) == 512,
+              "VolumeBootRecord must be 512 bytes");
 
 struct FSInfo {
   const uint32_t leadSignature{0x41615252};
@@ -263,51 +276,28 @@ SDFormatResult SectorWriter::writeMBR() {
   return writeSectors(fd_, 0, std::span{masterBootRecord});
 }
 
-SDFormatResult SectorWriter::writeFat32BootSector() {
-  const FAT32BootSector bootSector = {
-      .jmpBoot = {0xEB, 0x58, 0x90},
-      .oemName = {'M', 'S', 'W', 'I', 'N', '4', '.', '1'},
-      .bytesPerSector = kSectorSize,
-      .sectorsPerCluster = kSectorsPerCluster,
-      .reservedSectors = kReservedSectors,
-      .fatCount = kNumberFats,
-      .rootEntryCount = 0,
-      .totalSectors16 = 0,
-      .media = kMediaDescriptor,
-      .fatSize16 = 0,
-      .sectorsPerTrack = 63,
-      .headCount = 255,
-      .hiddenSectors = kPartitionAlignmentSectors,
-      .totalSectors32 = static_cast<uint32_t>(mbrPartitionSectorCount_),
-      .fatSize32 = fatSizeSectors_,
-      .extFlags = 0,
-      .fsVersion = 0,
-      .rootCluster = kRootCluster,
-      .fsInfoSector = kFsInfoSector,
-      .backupBootSector = kBackupBootSector,
-      .reserved = {},
-      .driveNumber = 0x80,
-      .reserved1 = 0,
-      .bootSignature = 0x29,
+SDFormatResult SectorWriter::writeVolumeBootRecord() {
+  const VolumeBootRecord vbr = {
+      .bpb = {
+          .totalSectors32 = static_cast<uint32_t>(mbrPartitionSectorCount_),
+          .fatSize32 = fatSizeSectors_,
+      },
       .volumeId = static_cast<uint32_t>(time(nullptr)),
       .volumeLabel = volumeLabel_,
-      .fsType = {'F', 'A', 'T', '3', '2', ' ', ' ', ' '},
-      .bootCode = {},
-      .signature = kFat32Signature,
   };
 
-  std::println("[SDFormat] Writing Boot Sector...");
+  std::println("[SDFormat] Writing VBR...");
   if (auto result =
           writeSectors(fd_, kPartitionAlignmentSectors,
-                       std::as_bytes(std::span{&bootSector, 1}));
+                       std::as_bytes(std::span{&vbr, 1}));
       result != SDFormatResult::Success) {
     return result;
   }
 
-  std::println("[SDFormat] Writing Backup Boot Sector...");
+  std::println("[SDFormat] Writing Backup VBR...");
   return writeSectors(fd_,
                       kPartitionAlignmentSectors + kBackupBootSector,
-                      std::as_bytes(std::span{&bootSector, 1}));
+                      std::as_bytes(std::span{&vbr, 1}));
 }
 
 SDFormatResult SectorWriter::writeFSInfo() {

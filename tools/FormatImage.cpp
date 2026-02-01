@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
 
   const Step steps[] = {
       {"MBR", &sdFormat::SectorWriter::writeMBR},
-      {"Boot Sector", &sdFormat::SectorWriter::writeFat32BootSector},
+      {"VBR", &sdFormat::SectorWriter::writeVolumeBootRecord},
       {"FSInfo", &sdFormat::SectorWriter::writeFSInfo},
       {"FAT Tables", &sdFormat::SectorWriter::writeFat32Tables},
       {"Root Directory", &sdFormat::SectorWriter::writeRootDirectory},

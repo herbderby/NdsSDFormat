@@ -27,7 +27,7 @@ public:
 
   // Atomic Write Operations
   SDFormatResult writeMBR();
-  SDFormatResult writeFat32BootSector();
+  SDFormatResult writeVolumeBootRecord();
   SDFormatResult writeFSInfo();
   SDFormatResult writeFat32Tables();
   SDFormatResult writeRootDirectory();

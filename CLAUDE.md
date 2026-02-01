@@ -60,7 +60,7 @@ Single class design: `sdFormat::SectorWriter`
 - **Factory**: `SectorWriter::make(fd, sectorCount, label)` —
   pre-calculates all derived layout values (FAT size, data start
   sector, free cluster count) from fundamentals.
-- **Write methods**: `writeMBR()`, `writeFat32BootSector()`,
+- **Write methods**: `writeMBR()`, `writeVolumeBootRecord()`,
   `writeFSInfo()`, `writeFat32Tables()`, `writeRootDirectory()` —
   consume pre-calculated members, return `SDFormatResult`.
 - **Static I/O helpers**: `writeBytes()`, `writeSectors()`,
@@ -83,6 +83,12 @@ Single class design: `sdFormat::SectorWriter`
 - Use `std::byte` for raw binary buffers
 - Packed structs must have `static_assert` on size; never reorder
   members (they map to binary disk formats)
+- On-disk structs should mirror the spec's structural hierarchy
+  (e.g., `VolumeBootRecord` contains `BiosParameterBlock` as a
+  nested struct, matching the VBR/BPB relationship in the spec).
+- Use default member initializers in packed structs for fixed
+  values (constants, zeros, magic numbers). Construction sites
+  should only specify runtime-varying fields.
 - Zero-init with aggregate initialization (`= {}`), not `memset`
 - `static constexpr` over `#define` macros
 - `static_cast<>()` never C-style casts
@@ -130,8 +136,10 @@ Single class design: `sdFormat::SectorWriter`
 ## Canonical Naming
 
 `docs/canonical_file_system.md` is the authoritative reference for
-on-disk field names. All struct fields in `SectorWriter.cpp` should
-follow the canonical names defined there.
+on-disk names. Canonical naming drives struct names, method names,
+and field names in `SectorWriter.cpp` (e.g., `VolumeBootRecord`
+not `FAT32BootSector`, `writeVolumeBootRecord()` not
+`writeFat32BootSector()`).
 
 Key terminology:
 
@@ -177,7 +185,7 @@ applicable so the docs stay connected.
   before macOS 13.3).
 - The library is consumed by `SwiftNdsSdFormat` via
   `.package(url: "https://github.com/herbderby/NdsSDFormat.git",
-  from: "1.0.1")`.
+  from: "2.0.0")`.
 - Never re-tag a released version. SPM caches commit hashes per tag
   and will refuse to resolve if the hash changes. Always bump the
   version number.
