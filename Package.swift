@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "NdsSDFormat",
+    platforms: [.macOS(.v26)],
     products: [
         .library(name: "NDSSDFormatCore",
                  targets: ["NDSSDFormatCore"])
