@@ -22,8 +22,7 @@ public:
   static constexpr uint32_t kFatCount = 2;
 
   // Factory
-  static SectorWriter make(int fd, size_t sectorCount,
-                           std::string_view label);
+  static SectorWriter make(int fd, size_t sectorCount, std::string_view label);
 
   // Atomic Write Operations
   SDFormatResult writeMBR();
@@ -38,12 +37,9 @@ public:
 
 private:
   // Private Constructor (called by make)
-  SectorWriter(int fd, size_t sectorCount,
-               std::array<char, 11> volumeLabel,
-               size_t partitionSectorCount,
-               uint32_t fatSizeSectors,
-               uint32_t fatStartSector,
-               uint32_t dataStartSector,
+  SectorWriter(int fd, size_t sectorCount, std::array<char, 11> volumeLabel,
+               size_t partitionSectorCount, uint32_t fatSizeSectors,
+               uint32_t fatStartSector, uint32_t dataStartSector,
                uint32_t freeClusterCount);
 
   // Low-level I/O (static, only need fd)
@@ -51,8 +47,7 @@ private:
                                    std::span<const std::byte> data);
   static SDFormatResult writeSectors(int fd, off_t sectorLba,
                                      std::span<const std::byte> data);
-  static SDFormatResult zeroSectors(int fd, off_t startSector,
-                                    uint32_t count);
+  static SDFormatResult zeroSectors(int fd, off_t startSector, uint32_t count);
 
   // Instance Members
   int fd_;

@@ -264,9 +264,7 @@ int main() {
   int failed = 0;
 
   if (!fs::exists("./build/format_image")) {
-    println(
-        stderr,
-        "Error: ./build/format_image not found. Run 'make' first.");
+    println(stderr, "Error: ./build/format_image not found. Run 'make' first.");
     return 1;
   }
 

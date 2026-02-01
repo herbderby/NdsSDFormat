@@ -24,12 +24,12 @@ static constexpr uint16_t kVbrSignature = 0xAA55;
 static constexpr uint8_t kAttrVolumeId = 0x08;
 
 struct PartitionEntry {
-  uint8_t status;                      // 0x80 = Active (bootable)
-  uint8_t chsStart[3];                 // CHS of first sector (0xFF for LBA)
-  uint8_t type;                        // Partition type (0x0C = FAT32 LBA)
-  uint8_t chsEnd[3];                   // CHS of last sector (0xFF for LBA)
-  uint32_t lbaStart;                   // LBA of first sector in partition
-  uint32_t sectorCount;                // Number of sectors in partition
+  uint8_t status;        // 0x80 = Active (bootable)
+  uint8_t chsStart[3];   // CHS of first sector (0xFF for LBA)
+  uint8_t type;          // Partition type (0x0C = FAT32 LBA)
+  uint8_t chsEnd[3];     // CHS of last sector (0xFF for LBA)
+  uint32_t lbaStart;     // LBA of first sector in partition
+  uint32_t sectorCount;  // Number of sectors in partition
 } __attribute__((packed));
 
 struct MasterBootRecord {
@@ -118,8 +118,7 @@ struct DirectoryEntry {
   const uint16_t firstClusterLow{0};
   const uint32_t fileSize{0};
 } __attribute__((packed));
-static_assert(sizeof(DirectoryEntry) == 32,
-              "DirectoryEntry must be 32 bytes");
+static_assert(sizeof(DirectoryEntry) == 32, "DirectoryEntry must be 32 bytes");
 
 struct RootDirSector {
   const DirectoryEntry volumeLabel;
@@ -148,10 +147,8 @@ static std::array<char, 11> prepareVolumeLabel(std::string_view label) {
 
 SectorWriter::SectorWriter(int fd, size_t sectorCount,
                            std::array<char, 11> volumeLabel,
-                           size_t partitionSectorCount,
-                           uint32_t fatSizeSectors,
-                           uint32_t fatStartSector,
-                           uint32_t dataStartSector,
+                           size_t partitionSectorCount, uint32_t fatSizeSectors,
+                           uint32_t fatStartSector, uint32_t dataStartSector,
                            uint32_t freeClusterCount)
     : fd_(fd),
       sectorCount_(sectorCount),
@@ -174,23 +171,21 @@ SectorWriter SectorWriter::make(int fd, size_t sectorCount,
   // FAT size calculation from the Microsoft FAT specification.
   // See canonical_file_system.md "Derived Layout Values" for derivation.
   uint64_t sectorsToAllocate = partitionSectorCount - kReservedSectors;
-  uint64_t sectorsPerFatEntry =
-      (256 * kSectorsPerCluster + kFatCount) / 2;
+  uint64_t sectorsPerFatEntry = (256 * kSectorsPerCluster + kFatCount) / 2;
   uint32_t fatSizeSectors = static_cast<uint32_t>(
       (sectorsToAllocate + (sectorsPerFatEntry - 1)) / sectorsPerFatEntry);
 
   uint32_t fatStartSector = kPartitionAlignmentSectors + kReservedSectors;
   uint32_t dataStartSector = fatStartSector + (kFatCount * fatSizeSectors);
 
-  uint32_t totalDataSectors =
-      static_cast<uint32_t>(partitionSectorCount) -
-      kReservedSectors - (kFatCount * fatSizeSectors);
+  uint32_t totalDataSectors = static_cast<uint32_t>(partitionSectorCount) -
+                              kReservedSectors - (kFatCount * fatSizeSectors);
   uint32_t freeClusterCount =
       (totalDataSectors / kSectorsPerCluster) - 1;  // minus root dir cluster
 
-  return SectorWriter(fd, sectorCount, volumeLabel,
-                      partitionSectorCount, fatSizeSectors,
-                      fatStartSector, dataStartSector, freeClusterCount);
+  return SectorWriter(fd, sectorCount, volumeLabel, partitionSectorCount,
+                      fatSizeSectors, fatStartSector, dataStartSector,
+                      freeClusterCount);
 }
 
 // -----------------------------------------------------------------------------
@@ -244,8 +239,7 @@ SDFormatResult SectorWriter::zeroSectors(int fd, off_t startSector,
     uint32_t toWrite =
         (remaining > kClusterSectors) ? kClusterSectors : remaining;
     SDFormatResult res =
-        writeSectors(fd, current,
-                     std::span{buffer, toWrite * kSectorSize});
+        writeSectors(fd, current, std::span{buffer, toWrite * kSectorSize});
     if (res != SDFormatResult::Success) {
       return res;
     }
@@ -280,25 +274,24 @@ SDFormatResult SectorWriter::writeMBR() {
 
 SDFormatResult SectorWriter::writeVolumeBootRecord() {
   const VolumeBootRecord vbr = {
-      .bpb = {
-          .totalSectors32 = static_cast<uint32_t>(partitionSectorCount_),
-          .fatSize32 = fatSizeSectors_,
-      },
+      .bpb =
+          {
+              .totalSectors32 = static_cast<uint32_t>(partitionSectorCount_),
+              .fatSize32 = fatSizeSectors_,
+          },
       .volumeId = static_cast<uint32_t>(time(nullptr)),
       .volumeLabel = volumeLabel_,
   };
 
   std::println("[SDFormat] Writing VBR...");
-  if (auto result =
-          writeSectors(fd_, kPartitionAlignmentSectors,
-                       std::as_bytes(std::span{&vbr, 1}));
+  if (auto result = writeSectors(fd_, kPartitionAlignmentSectors,
+                                 std::as_bytes(std::span{&vbr, 1}));
       result != SDFormatResult::Success) {
     return result;
   }
 
   std::println("[SDFormat] Writing Backup VBR...");
-  return writeSectors(fd_,
-                      kPartitionAlignmentSectors + kBackupBootSector,
+  return writeSectors(fd_, kPartitionAlignmentSectors + kBackupBootSector,
                       std::as_bytes(std::span{&vbr, 1}));
 }
 
@@ -309,16 +302,14 @@ SDFormatResult SectorWriter::writeFSInfo() {
 
   std::println("[SDFormat] Writing FSInfo...");
   if (auto result =
-          writeSectors(fd_,
-                       kPartitionAlignmentSectors + kFsInfoSector,
+          writeSectors(fd_, kPartitionAlignmentSectors + kFsInfoSector,
                        std::as_bytes(std::span{&fsinfo, 1}));
       result != SDFormatResult::Success) {
     return result;
   }
 
   std::println("[SDFormat] Writing Backup FSInfo...");
-  return writeSectors(fd_,
-                      kPartitionAlignmentSectors + kBackupBootSector + 1,
+  return writeSectors(fd_, kPartitionAlignmentSectors + kBackupBootSector + 1,
                       std::as_bytes(std::span{&fsinfo, 1}));
 }
 
@@ -337,16 +328,15 @@ SDFormatResult SectorWriter::writeFat32Tables() {
       SDFormatResult::Success) {
     return SDFormatResult::IOError;
   }
-  if (writeSectors(fd_, fatStartSector_,
-                   std::as_bytes(std::span{fatSector})) !=
+  if (writeSectors(fd_, fatStartSector_, std::as_bytes(std::span{fatSector})) !=
       SDFormatResult::Success) {
     return SDFormatResult::IOError;
   }
 
   // Zero FAT 2 & Write Header
   std::println("[SDFormat]   Zeroing FAT 2...");
-  if (zeroSectors(fd_, fatStartSector_ + fatSizeSectors_,
-                   fatSizeSectors_) != SDFormatResult::Success) {
+  if (zeroSectors(fd_, fatStartSector_ + fatSizeSectors_, fatSizeSectors_) !=
+      SDFormatResult::Success) {
     return SDFormatResult::IOError;
   }
   if (writeSectors(fd_, fatStartSector_ + fatSizeSectors_,

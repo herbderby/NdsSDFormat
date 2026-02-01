@@ -1,0 +1,13 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: Latest
+ColumnLimit: 80
+IndentWidth: 2
+AccessModifierOffset: -2
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Left
+AlignAfterOpenBracket: Align
+InsertBraces: true
+...
