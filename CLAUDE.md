@@ -136,10 +136,12 @@ Single class design: `sdFormat::SectorWriter`
 ## Canonical Naming
 
 `docs/canonical_file_system.md` is the authoritative reference for
-on-disk names. Canonical naming drives struct names, method names,
-and field names in `SectorWriter.cpp` (e.g., `VolumeBootRecord`
-not `FAT32BootSector`, `writeVolumeBootRecord()` not
-`writeFat32BootSector()`).
+on-disk names. Canonical naming drives **all** identifiers in
+`SectorWriter.cpp` — struct names, method names, struct field
+names, constant names, member variable names, and local variable
+names in formulas (e.g., `kFatCount` not `kNumberFats`,
+`partitionSectorCount` not `mbrPartitionSectorCount`,
+`sectorsToAllocate` not `tmpSize`).
 
 Key terminology:
 
@@ -176,6 +178,12 @@ applicable so the docs stay connected.
   (macOS requirement)
 - Root directory needs explicit `ATTR_VOLUME_ID` entry (BPB label
   alone is insufficient)
+- `writeFSInfo()` writes both primary (sector 1) and backup
+  (sector 7) copies; `writeVolumeBootRecord()` writes both
+  primary (sector 0) and backup (sector 6) copies
+- The FAT size formula in `make()` follows the MS spec derivation
+  documented in `canonical_file_system.md` — use `sectorsToAllocate`
+  and `sectorsPerFatEntry` as variable names, not opaque arithmetic
 
 ## SPM Notes
 

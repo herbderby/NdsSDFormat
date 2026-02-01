@@ -19,7 +19,7 @@ public:
   static constexpr uint32_t kClusterSize = kSectorsPerCluster * kSectorSize;
   static constexpr uint32_t kPartitionAlignmentSectors = 8192;
   static constexpr uint32_t kReservedSectors = 32;
-  static constexpr uint32_t kNumberFats = 2;
+  static constexpr uint32_t kFatCount = 2;
 
   // Factory
   static SectorWriter make(int fd, size_t sectorCount,
@@ -34,13 +34,13 @@ public:
 
   // Accessors
   size_t sectorCount() const { return sectorCount_; }
-  size_t mbrPartitionSectorCount() const { return mbrPartitionSectorCount_; }
+  size_t partitionSectorCount() const { return partitionSectorCount_; }
 
 private:
   // Private Constructor (called by make)
   SectorWriter(int fd, size_t sectorCount,
                std::array<char, 11> volumeLabel,
-               size_t mbrPartitionSectorCount,
+               size_t partitionSectorCount,
                uint32_t fatSizeSectors,
                uint32_t fatStartSector,
                uint32_t dataStartSector,
@@ -58,7 +58,7 @@ private:
   int fd_;
   size_t sectorCount_;
   std::array<char, 11> volumeLabel_;
-  size_t mbrPartitionSectorCount_;
+  size_t partitionSectorCount_;
   uint32_t fatSizeSectors_;
   uint32_t fatStartSector_;
   uint32_t dataStartSector_;
