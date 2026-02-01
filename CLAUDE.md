@@ -32,6 +32,9 @@ make all
 # Format a single image for manual inspection
 ./build/format_image test.img TESTLABEL 7813568
 
+# Format all C++ source files
+clang-format -i include/*.h src/*.cpp tools/*.cpp tests/*.cpp
+
 # Clean
 make clean
 ```
@@ -49,6 +52,7 @@ NdsSDFormat/
 │   └── FormatImage.cpp     # Minimal C++ CLI for testing
 ├── tests/
 │   └── integration_runner.cpp  # hdiutil/fsck/mount tests
+├── .clang-format      # Shared clang-format config (from SD_Card_Formatter)
 ├── Makefile           # C++ build (library + tools + tests)
 └── Package.swift      # SPM consumable C++ library
 ```
@@ -68,6 +72,19 @@ Single class design: `sdFormat::SectorWriter`
 - **Non-owning**: Caller manages FD lifecycle.
 
 ## Engineering Standards
+
+### Formatting
+
+- All C++ files must be formatted with `clang-format -i` using the
+  repo's `.clang-format` (Google base style, 80-column limit,
+  left-aligned pointers).
+- Run `clang-format -i include/*.h src/*.cpp tools/*.cpp tests/*.cpp`
+  before committing C++ changes.
+- **Known limitation**: clang-format splits nested designated
+  initializer braces onto a new line (e.g., `.bpb =\n{` instead of
+  `.bpb = {`). No config workaround exists as of clang-format 21.
+  Accept the tool's output rather than fighting it with
+  `// clang-format off`.
 
 ### C++
 
@@ -100,7 +117,8 @@ Single class design: `sdFormat::SectorWriter`
 ### General
 
 - Dead code must be deleted immediately, not commented out
-- Cleanup/formatting changes must be separate atomic commits
+- Formatting changes (clang-format) must be separate atomic commits
+  from logic changes
 
 ## Git Workflow
 
