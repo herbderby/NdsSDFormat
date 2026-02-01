@@ -1,0 +1,31 @@
+# Build Artifacts
+build/
+.build/
+Package.resolved
+*.o
+*.a
+*.d
+*.img
+
+# macOS System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Trashes
+.Spotlight-V100
+.TemporaryItems
+.fseventsd
+
+# VS Code
+.vscode/*
+.history/
+
+# AI
+.gemini/
+.agent
+.mcp.json
+
+# Clangd
+.cache/
+compile_commands.json
