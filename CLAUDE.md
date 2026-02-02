@@ -1,7 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when
-working with code in this repository.
+This file provides guidance to Claude Code when working with code in
+this repository.
 
 ## Project Overview
 
@@ -73,68 +73,23 @@ Single class design: `sdFormat::SectorWriter`
 
 ## Engineering Standards
 
-### Formatting
+See `~/.claude/standards/` for shared conventions:
 
-- All C++ files must be formatted with `clang-format -i` using the
-  repo's `.clang-format` (Google base style, 80-column limit,
-  left-aligned pointers).
-- Run `clang-format -i include/*.h src/*.cpp tools/*.cpp tests/*.cpp`
-  before committing C++ changes.
-- **Known limitation**: clang-format splits nested designated
-  initializer braces onto a new line (e.g., `.bpb =\n{` instead of
-  `.bpb = {`). No config workaround exists as of clang-format 21.
-  Accept the tool's output rather than fighting it with
-  `// clang-format off`.
+- `base.md` — Core principles (dead code deletion, atomic commits)
+- `cpp.md` — C++23 standards (naming, style, packed structs)
+- `git.md` — Commit workflow (no `git add .`, message file, prefixes)
+- `markdown.md` — Formatting rules (80-char wrap, 2-space indent)
 
-### C++
+### Project-Specific: clang-format
 
-- C++23 with `-Wall -Wextra -Wpedantic -Werror` (zero warnings)
-- **No exceptions** — code bridges to Swift via C. Use result codes.
-- File names: PascalCase matching primary class name
-- Naming: `PascalCase` types, `camelCase` variables, `camelCase_`
-  members (trailing underscore)
-- Include guards: `#ifndef FILENAME_H` (`#pragma once` forbidden)
-- Include order: related header, C system, C++ stdlib, project headers
-- Pointer style: `Type* variable` (asterisk with type)
-- Use `std::print`/`std::println` (not `printf`/`cout`)
-- Use `std::byte` for raw binary buffers
-- Packed structs must have `static_assert` on size; never reorder
-  members (they map to binary disk formats)
-- On-disk structs should mirror the spec's structural hierarchy
-  (e.g., `VolumeBootRecord` contains `BiosParameterBlock` as a
-  nested struct, matching the VBR/BPB relationship in the spec).
-- Use default member initializers in packed structs for fixed
-  values (constants, zeros, magic numbers). Construction sites
-  should only specify runtime-varying fields.
-- Zero-init with aggregate initialization (`= {}`), not `memset`
-- `static constexpr` over `#define` macros
-- `static_cast<>()` never C-style casts
-- Calculated `constexpr` values over hardcoded magic numbers
-- Always use braces for control flow bodies
-- Class layout: Types -> Constants -> Factory -> Lifecycle ->
-  Public -> Accessors -> Private Members
+Run `clang-format -i include/*.h src/*.cpp tools/*.cpp tests/*.cpp`
+before committing C++ changes.
 
-### General
-
-- Dead code must be deleted immediately, not commented out
-- Formatting changes (clang-format) must be separate atomic commits
-  from logic changes
-
-## Git Workflow
-
-- Never use `git add .` — add files individually by path
-- Write commit message to a `commit_message` file for user review
-- Commit with `git commit -F commit_message && rm commit_message`
-- Subject line: max 50 chars, imperative mood, type prefix
-  (`feat:`, `fix:`, `refactor:`, `test:`, `perf:`, `chore:`,
-  `docs:`, `style:`)
-- Body: wrap at 72 chars, explain *why* not *what*
-
-## Markdown
-
-- Lines wrapped at 80 characters (except code blocks, URLs, tables)
-- 2-space indentation for nested list items
-- Blank lines before and after headers and lists
+**Known limitation**: clang-format splits nested designated
+initializer braces onto a new line (e.g., `.bpb =\n{` instead of
+`.bpb = {`). No config workaround exists as of clang-format 21.
+Accept the tool's output rather than fighting it with
+`// clang-format off`.
 
 ## Documentation Standards
 
@@ -229,3 +184,7 @@ across multiple SD card sizes:
 
 All 5 sizes (4GB, 8GB, 16GB, 32GB, 64GB) pass as of 2026-01-31.
 Tests do not require `sudo`.
+
+## Next Steps
+
+(None currently documented)
