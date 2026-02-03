@@ -20,6 +20,14 @@ public:
   static constexpr uint32_t kPartitionAlignmentSectors = 8192;
   static constexpr uint32_t kReservedSectors = 32;
   static constexpr uint32_t kFatCount = 2;
+  static constexpr uint32_t kFatStartSector =
+      kPartitionAlignmentSectors + kReservedSectors;
+
+  // Derived layout values (all determined by sectorCount)
+  static size_t partitionSectorCount(size_t sectorCount);
+  static uint32_t fatSizeSectors(size_t sectorCount);
+  static uint32_t dataStartSector(size_t sectorCount);
+  static uint32_t freeClusterCount(size_t sectorCount);
 
   // Factory
   static SectorWriter make(int fd, size_t sectorCount, std::string_view label);
@@ -33,14 +41,10 @@ public:
 
   // Accessors
   size_t sectorCount() const { return sectorCount_; }
-  size_t partitionSectorCount() const { return partitionSectorCount_; }
 
 private:
   // Private Constructor (called by make)
-  SectorWriter(int fd, size_t sectorCount, std::array<char, 11> volumeLabel,
-               size_t partitionSectorCount, uint32_t fatSizeSectors,
-               uint32_t fatStartSector, uint32_t dataStartSector,
-               uint32_t freeClusterCount);
+  SectorWriter(int fd, size_t sectorCount, std::array<char, 11> volumeLabel);
 
   // Low-level I/O (static, only need fd)
   static SDFormatResult writeBytes(int fd, off_t offset,
@@ -53,11 +57,6 @@ private:
   int fd_;
   size_t sectorCount_;
   std::array<char, 11> volumeLabel_;
-  size_t partitionSectorCount_;
-  uint32_t fatSizeSectors_;
-  uint32_t fatStartSector_;
-  uint32_t dataStartSector_;
-  uint32_t freeClusterCount_;
 };
 
 }  // namespace sdFormat
