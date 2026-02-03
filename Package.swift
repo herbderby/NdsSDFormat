@@ -12,7 +12,7 @@ let package = Package(
         .target(
             name: "NDSSDFormatCore",
             path: ".",
-            sources: ["src/SectorWriter.cpp"],
+            sources: ["src/SDFormat.cpp"],
             publicHeadersPath: "include",
             cxxSettings: [
                 .unsafeFlags(["-std=c++23"])

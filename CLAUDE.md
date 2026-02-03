@@ -44,12 +44,11 @@ make clean
 ```text
 NdsSDFormat/
 ├── include/           # Public headers (SPM publicHeadersPath)
-│   ├── SDFormatResult.h    # Result/error codes
-│   └── SectorWriter.h      # Main API
+│   └── SDFormat.h         # C API (result codes + write functions)
 ├── src/
-│   └── SectorWriter.cpp    # Implementation
+│   └── SDFormat.cpp       # Implementation
 ├── tools/
-│   └── FormatImage.cpp     # Minimal C++ CLI for testing
+│   └── FormatImage.cpp    # Minimal C++ CLI for testing
 ├── tests/
 │   └── integration_runner.cpp  # hdiutil/fsck/mount tests
 ├── .clang-format      # Shared clang-format config (from SD_Card_Formatter)
@@ -59,16 +58,20 @@ NdsSDFormat/
 
 ## Architecture
 
-Single class design: `sdFormat::SectorWriter`
+Free C functions with `extern "C"` linkage. Each function takes
+only what it needs — no class, no state.
 
-- **Factory**: `SectorWriter::make(fd, sectorCount, label)` —
-  pre-calculates all derived layout values (FAT size, data start
-  sector, free cluster count) from fundamentals.
-- **Write methods**: `writeMBR()`, `writeVolumeBootRecord()`,
-  `writeFSInfo()`, `writeFat32Tables()`, `writeRootDirectory()` —
-  consume pre-calculated members, return `SDFormatResult`.
-- **Static I/O helpers**: `writeBytes()`, `writeSectors()`,
-  `zeroSectors()` — low-level I/O, only need fd.
+- **Write functions**: `sdFormatWriteMBR(fd, sectorCount)`,
+  `sdFormatWriteVolumeBootRecord(fd, sectorCount, label)`,
+  `sdFormatWriteFSInfo(fd, sectorCount)`,
+  `sdFormatWriteFat32Tables(fd, sectorCount)`,
+  `sdFormatWriteRootDirectory(fd, sectorCount, label)` —
+  return `SDFormatResult`.
+- **Derived layout**: `partitionSectorCount()`,
+  `fatSizeSectors()`, `dataStartSector()`, `freeClusterCount()`
+  — file-scoped `static` functions (implementation detail).
+- **I/O helpers**: `writeBytes()`, `writeSectors()`,
+  `zeroSectors()` — file-scoped `static` functions.
 - **Non-owning**: Caller manages FD lifecycle.
 
 ## Engineering Standards
@@ -99,7 +102,7 @@ Accept the tool's output rather than fighting it with
 - Formulas must use descriptive variable names, never opaque
   temporaries (`tmpVal1`). If transcribing a spec formula,
   rename its variables and explain the original reasoning.
-- Every on-disk structure written by `SectorWriter` must be
+- Every on-disk structure written by the library must be
   documented in `canonical_file_system.md`, including backup
   copies (backup VBR, backup FSInfo, backup FAT).
 - When a spec uses magic constants (e.g., `256`, `/ 2`),
@@ -110,9 +113,9 @@ Accept the tool's output rather than fighting it with
 
 `docs/canonical_file_system.md` is the authoritative reference for
 on-disk names. Canonical naming drives **all** identifiers in
-`SectorWriter.cpp` — struct names, method names, struct field
-names, constant names, member variable names, and local variable
-names in formulas (e.g., `kFatCount` not `kNumberFats`,
+`SDFormat.cpp` — struct names, function names, struct field
+names, constant names, and local variable names in formulas
+(e.g., `kFatCount` not `kNumberFats`,
 `partitionSectorCount` not `mbrPartitionSectorCount`,
 `sectorsToAllocate` not `tmpSize`).
 
@@ -151,12 +154,13 @@ applicable so the docs stay connected.
   (macOS requirement)
 - Root directory needs explicit `ATTR_VOLUME_ID` entry (BPB label
   alone is insufficient)
-- `writeFSInfo()` writes both primary (sector 1) and backup
-  (sector 7) copies; `writeVolumeBootRecord()` writes both
-  primary (sector 0) and backup (sector 6) copies
-- The FAT size formula in `make()` follows the MS spec derivation
-  documented in `canonical_file_system.md` — use `sectorsToAllocate`
-  and `sectorsPerFatEntry` as variable names, not opaque arithmetic
+- `sdFormatWriteFSInfo()` writes both primary (sector 1) and
+  backup (sector 7) copies; `sdFormatWriteVolumeBootRecord()`
+  writes both primary (sector 0) and backup (sector 6) copies
+- The FAT size formula in `fatSizeSectors()` follows the MS spec
+  derivation documented in `canonical_file_system.md` — use
+  `sectorsToAllocate` and `sectorsPerFatEntry` as variable names,
+  not opaque arithmetic
 
 ## SPM Notes
 

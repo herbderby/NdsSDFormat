@@ -3,10 +3,9 @@
 ///
 /// Usage: format_image <path> <label> <sector-count>
 ///
-/// Opens the file at @p path, constructs a SectorWriter with the given
-/// sector count, and writes all five filesystem structures (MBR, boot
-/// sector, FSInfo, FAT tables, root directory).  Exits 0 on success,
-/// 1 on any failure.
+/// Opens the file at @p path and writes all five filesystem structures
+/// (MBR, VBR, FSInfo, FAT tables, root directory).  Exits 0 on
+/// success, 1 on any failure.
 ///
 /// This tool is intentionally minimal: no simulation, no device support,
 /// no confirmation prompt.  It exists to test the C++ library in
@@ -18,10 +17,8 @@
 #include <cstdlib>
 #include <print>
 #include <string>
-#include <string_view>
 
-#include "SDFormatResult.h"
-#include "SectorWriter.h"
+#include "SDFormat.h"
 
 int main(int argc, char* argv[]) {
   if (argc != 4) {
@@ -30,7 +27,7 @@ int main(int argc, char* argv[]) {
   }
 
   const std::string path = argv[1];
-  const std::string_view label = argv[2];
+  const char* label = argv[2];
   const uint64_t sectorCount = std::stoull(argv[3]);
 
   int fd = open(path.c_str(), O_RDWR);
@@ -39,30 +36,48 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  auto writer = sdFormat::SectorWriter::make(fd, sectorCount, label);
+  SDFormatResult r;
 
-  struct Step {
-    const char* name;
-    SDFormatResult (sdFormat::SectorWriter::*method)();
-  };
+  std::println("[FormatImage] Writing MBR...");
+  r = sdFormatWriteMBR(fd, sectorCount);
+  if (r != SDFormatSuccess) {
+    std::println(stderr, "Error: MBR failed (code {})", static_cast<int>(r));
+    close(fd);
+    return 1;
+  }
 
-  const Step steps[] = {
-      {"MBR", &sdFormat::SectorWriter::writeMBR},
-      {"VBR", &sdFormat::SectorWriter::writeVolumeBootRecord},
-      {"FSInfo", &sdFormat::SectorWriter::writeFSInfo},
-      {"FAT Tables", &sdFormat::SectorWriter::writeFat32Tables},
-      {"Root Directory", &sdFormat::SectorWriter::writeRootDirectory},
-  };
+  std::println("[FormatImage] Writing VBR...");
+  r = sdFormatWriteVolumeBootRecord(fd, sectorCount, label);
+  if (r != SDFormatSuccess) {
+    std::println(stderr, "Error: VBR failed (code {})", static_cast<int>(r));
+    close(fd);
+    return 1;
+  }
 
-  for (const auto& step : steps) {
-    std::println("[FormatImage] Writing {}...", step.name);
-    SDFormatResult result = (writer.*(step.method))();
-    if (result != SDFormatResult::Success) {
-      std::println(stderr, "Error: {} failed (code {})", step.name,
-                   static_cast<int>(result));
-      close(fd);
-      return 1;
-    }
+  std::println("[FormatImage] Writing FSInfo...");
+  r = sdFormatWriteFSInfo(fd, sectorCount);
+  if (r != SDFormatSuccess) {
+    std::println(stderr, "Error: FSInfo failed (code {})", static_cast<int>(r));
+    close(fd);
+    return 1;
+  }
+
+  std::println("[FormatImage] Writing FAT Tables...");
+  r = sdFormatWriteFat32Tables(fd, sectorCount);
+  if (r != SDFormatSuccess) {
+    std::println(stderr, "Error: FAT Tables failed (code {})",
+                 static_cast<int>(r));
+    close(fd);
+    return 1;
+  }
+
+  std::println("[FormatImage] Writing Root Directory...");
+  r = sdFormatWriteRootDirectory(fd, sectorCount, label);
+  if (r != SDFormatSuccess) {
+    std::println(stderr, "Error: Root Directory failed (code {})",
+                 static_cast<int>(r));
+    close(fd);
+    return 1;
   }
 
   close(fd);
