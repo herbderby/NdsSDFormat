@@ -38,6 +38,9 @@ swift build
 # Format all C++ source files
 clang-format -i include/*.h src/*.cpp tools/*.cpp tests/*.cpp
 
+# Format all Swift source files
+swift format --in-place --recursive Sources/ Package.swift
+
 # Clean
 make clean
 ```
@@ -94,10 +97,16 @@ See `~/.claude/standards/` for shared conventions:
 - `git.md` — Commit workflow (no `git add .`, message file, prefixes)
 - `markdown.md` — Formatting rules (80-char wrap, 2-space indent)
 
-### Project-Specific: clang-format
+### Project-Specific: Code Formatting
 
-Run `clang-format -i include/*.h src/*.cpp tools/*.cpp tests/*.cpp`
-before committing C++ changes.
+A pre-commit hook enforces formatting for both languages.
+Commits will be rejected if any staged file is not formatted.
+
+- **C++**: `clang-format -i include/*.h src/*.cpp tools/*.cpp
+  tests/*.cpp` — config in `.clang-format`
+- **Swift**: `swift format --in-place --recursive Sources/
+  Package.swift` — uses toolchain defaults (2-space indent,
+  100-column line length)
 
 **Known limitation**: clang-format splits nested designated
 initializer braces onto a new line (e.g., `.bpb =\n{` instead of
