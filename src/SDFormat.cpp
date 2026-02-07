@@ -891,6 +891,23 @@ static int writeSector(int fd, off_t sectorLba, const T& sector) {
   return writeBytes(fd, offset, std::as_bytes(std::span{&sector, 1}));
 }
 
+// writeSectorAndBackupSector
+// --------------------------
+// Writes the same 512-byte structure to two LBAs (primary and backup).
+//
+// FAT32 stores backup copies of critical structures (VBR at sector 6,
+// FSInfo at sector 7, FAT reserved entries at the start of FAT 2).
+// This helper ensures both copies are written identically.
+
+template <typename T>
+static int writeSectorAndBackupSector(int fd, off_t primaryLba, off_t backupLba,
+                                      const T& sector) {
+  if (int err = writeSector(fd, primaryLba, sector); err != 0) {
+    return err;
+  }
+  return writeSector(fd, backupLba, sector);
+}
+
 // zeroSectors
 // -----------
 // Writes zeros to a contiguous range of sectors.
@@ -1023,15 +1040,10 @@ int sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
       .volumeLabel = volumeLabel,
   };
 
-  // Write primary VBR to partition sector 0
-  // Absolute LBA = kPartitionAlignmentSectors (8192)
-  if (int err = writeSector(fd, kPartitionAlignmentSectors, vbr); err != 0) {
-    return err;
-  }
-
-  // Write backup VBR to partition sector 6
-  // Absolute LBA = kPartitionAlignmentSectors + kBackupBootSector (8198)
-  return writeSector(fd, kPartitionAlignmentSectors + kBackupBootSector, vbr);
+  // Write primary VBR (partition sector 0) and backup VBR (partition sector 6)
+  return writeSectorAndBackupSector(
+      fd, kPartitionAlignmentSectors,
+      kPartitionAlignmentSectors + kBackupBootSector, vbr);
 }
 
 // sdFormatWriteFSInfo
@@ -1053,18 +1065,10 @@ int sdFormatWriteFSInfo(int fd, uint64_t sectorCount) {
       // nextFree defaults to 3 (cluster after root directory)
   };
 
-  // Write primary FSInfo to partition sector 1
-  // Absolute LBA = kPartitionAlignmentSectors + kFsInfoSector (8193)
-  if (int err =
-          writeSector(fd, kPartitionAlignmentSectors + kFsInfoSector, fsinfo);
-      err != 0) {
-    return err;
-  }
-
-  // Write backup FSInfo to partition sector 7
-  // Absolute LBA = kPartitionAlignmentSectors + kBackupBootSector + 1 (8199)
-  return writeSector(fd, kPartitionAlignmentSectors + kBackupBootSector + 1,
-                     fsinfo);
+  // Write primary FSInfo (partition sector 1) and backup (partition sector 7)
+  return writeSectorAndBackupSector(
+      fd, kPartitionAlignmentSectors + kFsInfoSector,
+      kPartitionAlignmentSectors + kBackupBootSector + 1, fsinfo);
 }
 
 // sdFormatWriteFat32Tables
@@ -1109,27 +1113,14 @@ int sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
 
   uint32_t fatSize = fatSizeSectors(sectorCount);
 
-  // ----- Primary FAT (FAT 1) -----
-  // Location: kFatStartSector to kFatStartSector + fatSize - 1
-
-  if (int err = zeroSectors(fd, kFatStartSector, fatSize); err != 0) {
+  // Zero both FAT copies (contiguous on disk)
+  if (int err = zeroSectors(fd, kFatStartSector, 2 * fatSize); err != 0) {
     return err;
   }
 
-  // Write reserved entries to first sector of FAT 1
-  if (int err = writeSector(fd, kFatStartSector, fatSector); err != 0) {
-    return err;
-  }
-
-  // ----- Backup FAT (FAT 2) -----
-  // Location: kFatStartSector + fatSize to kFatStartSector + 2*fatSize - 1
-
-  if (int err = zeroSectors(fd, kFatStartSector + fatSize, fatSize); err != 0) {
-    return err;
-  }
-
-  // Write reserved entries to first sector of FAT 2
-  return writeSector(fd, kFatStartSector + fatSize, fatSector);
+  // Write reserved entries to first sector of each FAT
+  return writeSectorAndBackupSector(fd, kFatStartSector,
+                                    kFatStartSector + fatSize, fatSector);
 }
 
 // sdFormatWriteRootDirectory
