@@ -5,20 +5,20 @@ this repository.
 
 ## Project Overview
 
-Pure C++23 library for deterministic FAT32 formatting targeting
-Nintendo DS flashcarts (R4i, Acekard). Constructs MBR + FAT32
-filesystem structures with 32KB clusters and 4MB alignment,
+C++23 library + Swift wrapper for deterministic FAT32 formatting
+targeting Nintendo DS flashcarts (R4i, Acekard). Constructs MBR +
+FAT32 filesystem structures with 32KB clusters and 4MB alignment,
 ensuring bit-perfect compatibility with ARM9 bootloaders.
 
-This is **Repo 1** of a 3-repo dependency chain:
+This is **Repo 1** of a 2-repo dependency chain:
 
 ```text
 herbderby/NDSFlashcartFormatter (App)
-  depends on -> herbderby/SwiftNdsSdFormat (Swift bridge)
-    depends on -> herbderby/NdsSDFormat (this repo, C++ library)
+  depends on -> herbderby/NdsSDFormat (this repo, C++ library + Swift wrapper)
 ```
 
-SPM product: `NDSSDFormatCore`
+SPM products: `NDSSDFormatCore` (C++ library),
+`NDSSDFormat` (Swift wrapper)
 
 ## Build Commands
 
@@ -50,17 +50,21 @@ The Makefile sets these in `CXXFLAGS`; Package.swift sets them in
 
 ```text
 NdsSDFormat/
-├── include/           # Public headers (SPM publicHeadersPath)
+├── include/           # Public C headers (SPM publicHeadersPath)
 │   └── SDFormat.h         # C API (result codes + write functions)
 ├── src/
-│   └── SDFormat.cpp       # Implementation
+│   └── SDFormat.cpp       # C++ implementation
+├── Sources/
+│   └── NDSSDFormat/       # Swift wrapper (SPM target)
+│       ├── FormatterError.swift  # Error enum mapping C result codes
+│       └── SectorWriter.swift    # Throwing wrapper around C functions
 ├── tools/
 │   └── FormatImage.cpp    # Minimal C++ CLI for testing
 ├── tests/
 │   └── integration_runner.cpp  # hdiutil/fsck/mount tests
 ├── .clang-format      # Shared clang-format config (from SD_Card_Formatter)
 ├── Makefile           # C++ build (library + tools + tests)
-└── Package.swift      # SPM consumable C++ library
+└── Package.swift      # SPM: NDSSDFormatCore (C++) + NDSSDFormat (Swift)
 ```
 
 ## Architecture
@@ -175,9 +179,10 @@ applicable so the docs stay connected.
   Without this, SPM defaults to a deployment target too low for
   C++23 `<print>` (which uses `std::to_chars` internally, unavailable
   before macOS 13.3).
-- The library is consumed by `SwiftNdsSdFormat` via
+- The `NDSSDFormat` Swift wrapper is consumed directly by
+  `NDSFlashcartFormatter` via
   `.package(url: "https://github.com/herbderby/NdsSDFormat.git",
-  from: "2.0.0")`.
+  from: "3.0.0")`.
 - Never re-tag a released version. SPM caches commit hashes per tag
   and will refuse to resolve if the hash changes. Always bump the
   version number.

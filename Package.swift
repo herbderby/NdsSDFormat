@@ -6,7 +6,9 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "NDSSDFormatCore",
-                 targets: ["NDSSDFormatCore"])
+                 targets: ["NDSSDFormatCore"]),
+        .library(name: "NDSSDFormat",
+                 targets: ["NDSSDFormat"]),
     ],
     targets: [
         .target(
@@ -23,6 +25,23 @@ let package = Package(
                     "-Werror",
                 ])
             ]
-        )
+        ),
+        .target(
+            name: "NDSSDFormat",
+            dependencies: ["NDSSDFormatCore"],
+            path: "Sources/NDSSDFormat",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .enableExperimentalFeature("StrictConcurrency"),
+            ]
+        ),
+        .testTarget(
+            name: "NDSSDFormatTests",
+            dependencies: ["NDSSDFormat"],
+            path: "tests/NDSSDFormatTests",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
     ]
 )
