@@ -14,7 +14,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <print>
 #include <string>
 
@@ -32,50 +34,49 @@ int main(int argc, char* argv[]) {
 
   int fd = open(path.c_str(), O_RDWR);
   if (fd < 0) {
-    std::println(stderr, "Error: Failed to open '{}'", path);
+    std::println(stderr, "Error: Failed to open '{}': {}", path,
+                 strerror(errno));
     return 1;
   }
 
-  SDFormatResult r;
+  int err;
 
   std::println("[FormatImage] Writing MBR...");
-  r = sdFormatWriteMBR(fd, sectorCount);
-  if (r != SDFormatSuccess) {
-    std::println(stderr, "Error: MBR failed (code {})", static_cast<int>(r));
+  err = sdFormatWriteMBR(fd, sectorCount);
+  if (err != 0) {
+    std::println(stderr, "Error: MBR failed: {}", strerror(err));
     close(fd);
     return 1;
   }
 
   std::println("[FormatImage] Writing VBR...");
-  r = sdFormatWriteVolumeBootRecord(fd, sectorCount, label);
-  if (r != SDFormatSuccess) {
-    std::println(stderr, "Error: VBR failed (code {})", static_cast<int>(r));
+  err = sdFormatWriteVolumeBootRecord(fd, sectorCount, label);
+  if (err != 0) {
+    std::println(stderr, "Error: VBR failed: {}", strerror(err));
     close(fd);
     return 1;
   }
 
   std::println("[FormatImage] Writing FSInfo...");
-  r = sdFormatWriteFSInfo(fd, sectorCount);
-  if (r != SDFormatSuccess) {
-    std::println(stderr, "Error: FSInfo failed (code {})", static_cast<int>(r));
+  err = sdFormatWriteFSInfo(fd, sectorCount);
+  if (err != 0) {
+    std::println(stderr, "Error: FSInfo failed: {}", strerror(err));
     close(fd);
     return 1;
   }
 
   std::println("[FormatImage] Writing FAT Tables...");
-  r = sdFormatWriteFat32Tables(fd, sectorCount);
-  if (r != SDFormatSuccess) {
-    std::println(stderr, "Error: FAT Tables failed (code {})",
-                 static_cast<int>(r));
+  err = sdFormatWriteFat32Tables(fd, sectorCount);
+  if (err != 0) {
+    std::println(stderr, "Error: FAT Tables failed: {}", strerror(err));
     close(fd);
     return 1;
   }
 
   std::println("[FormatImage] Writing Root Directory...");
-  r = sdFormatWriteRootDirectory(fd, sectorCount, label);
-  if (r != SDFormatSuccess) {
-    std::println(stderr, "Error: Root Directory failed (code {})",
-                 static_cast<int>(r));
+  err = sdFormatWriteRootDirectory(fd, sectorCount, label);
+  if (err != 0) {
+    std::println(stderr, "Error: Root Directory failed: {}", strerror(err));
     close(fd);
     return 1;
   }

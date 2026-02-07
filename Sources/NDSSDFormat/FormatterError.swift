@@ -1,54 +1,40 @@
-import NDSSDFormatCore
+import Darwin
 
 /// Errors thrown by ``SectorWriter`` operations.
 ///
 /// The ``invalidFileDescriptor`` and ``tooSmall`` cases are caught
-/// during initialization. The remaining cases map to result codes
-/// from the C formatting library.
+/// during initialization. The ``ioError(_:)`` case wraps the `errno`
+/// value from a failed I/O system call in the C formatting library.
 public enum FormatterError: Error, Equatable, Sendable {
   /// The file descriptor is not positive.
   case invalidFileDescriptor
-  /// The operating system denied write access to the device.
-  case accessDenied
-  /// The device is in use by another process.
-  case deviceBusy
-  /// The device path does not refer to a valid block device.
-  case invalidDevice
-  /// A read or write operation failed.
-  case ioError
-  /// The device has fewer sectors than the minimum required for FAT32.
-  case tooSmall
-  /// The C library returned an unrecognized result code.
-  case unknown(UInt32)
-
-  /// Creates a `FormatterError` from a C `SDFormatResult` code.
+  /// The device is smaller than the minimum required for formatting.
   ///
-  /// - Parameter result: The result code returned by a C formatting function.
-  public init(result: SDFormatResult) {
-    switch result {
-    case SDFormatAccessDenied: self = .accessDenied
-    case SDFormatDeviceBusy: self = .deviceBusy
-    case SDFormatInvalidDevice: self = .invalidDevice
-    case SDFormatIOError: self = .ioError
-    case SDFormatTooSmall: self = .tooSmall
-    default: self = .unknown(result.rawValue)
-    }
+  /// Both values are in bytes.
+  case tooSmall(actual: UInt64, minimum: UInt64)
+  /// A system call failed during I/O. The associated value is `errno`.
+  case ioError(Int32)
+
+  /// Creates a `FormatterError` from an `errno` value returned by a
+  /// C formatting function.
+  ///
+  /// - Parameter errno: The `errno` value from the failed I/O call.
+  ///   Must be non-zero.
+  public init(errno: Int32) {
+    self = .ioError(errno)
   }
 
   /// A human-readable description of the error suitable for logging.
   ///
-  /// Each case returns a short, plain-English phrase describing the
-  /// failure. For ``unknown(_:)`` the raw numeric code is included
-  /// so it can be cross-referenced with `SDFormatResult` values.
+  /// For ``ioError(_:)`` the system's `strerror` message is included
+  /// so the user sees a meaningful explanation (e.g. "Permission denied").
   public var localizedDescription: String {
     switch self {
     case .invalidFileDescriptor: "Invalid file descriptor"
-    case .accessDenied: "Access denied"
-    case .deviceBusy: "Device busy"
-    case .invalidDevice: "Invalid device"
-    case .ioError: "I/O error"
-    case .tooSmall: "Device too small"
-    case .unknown(let code): "Unknown error (code: \(code))"
+    case .tooSmall(let actual, let minimum):
+      "Device too small: \(actual) bytes, need at least \(minimum) bytes"
+    case .ioError(let code):
+      "I/O error: \(String(cString: strerror(code))) (errno: \(code))"
     }
   }
 }

@@ -839,23 +839,12 @@ static uint32_t freeClusterCount(uint64_t sectorCount) {
 //   data:   Span of bytes to write
 //
 // Returns:
-//   SDFormatSuccess on successful write (or if data is empty)
-//   SDFormatInvalidDevice if fd is invalid
-//   SDFormatIOError on seek or write failure
+//   0 on success, or errno from the failed lseek/write call.
 
-static SDFormatResult writeBytes(int fd, off_t offset,
-                                 std::span<const std::byte> data) {
-  if (data.empty()) {
-    return SDFormatSuccess;
-  }
-
-  if (fd < 0) {
-    return SDFormatInvalidDevice;
-  }
-
+static int writeBytes(int fd, off_t offset, std::span<const std::byte> data) {
   // Seek to the target offset
   if (lseek(fd, offset, SEEK_SET) == -1) {
-    return SDFormatIOError;
+    return errno;
   }
 
   // Write data, handling partial writes and interrupts
@@ -869,14 +858,14 @@ static SDFormatResult writeBytes(int fd, off_t offset,
       if (errno == EINTR) {
         continue;  // Interrupted; retry
       }
-      return SDFormatIOError;
+      return errno;
     }
 
     ptr += written;
     remaining -= static_cast<size_t>(written);
   }
 
-  return SDFormatSuccess;
+  return 0;
 }
 
 // writeSector
@@ -893,11 +882,10 @@ static SDFormatResult writeBytes(int fd, off_t offset,
 //   sector:    Reference to a 512-byte structure to write
 //
 // Returns:
-//   SDFormatSuccess on successful write
-//   SDFormatIOError on I/O failure
+//   0 on success, or errno from the failed I/O call.
 
 template <typename T>
-static SDFormatResult writeSector(int fd, off_t sectorLba, const T& sector) {
+static int writeSector(int fd, off_t sectorLba, const T& sector) {
   static_assert(sizeof(T) == kSectorSize);
   off_t offset = sectorLba * kSectorSize;
   return writeBytes(fd, offset, std::as_bytes(std::span{&sector, 1}));
@@ -916,11 +904,9 @@ static SDFormatResult writeSector(int fd, off_t sectorLba, const T& sector) {
 //   sectorCount: Number of sectors to zero
 //
 // Returns:
-//   SDFormatSuccess if all sectors zeroed successfully
-//   SDFormatIOError on I/O failure
+//   0 on success, or errno from the failed I/O call.
 
-static SDFormatResult zeroSectors(int fd, off_t startSector,
-                                  uint32_t sectorCount) {
+static int zeroSectors(int fd, off_t startSector, uint32_t sectorCount) {
   // Use a cluster-sized buffer for efficient bulk zeroing
   static constexpr uint32_t kClusterBytes = kSectorsPerCluster * kSectorSize;
   std::byte buffer[kClusterBytes] = {};  // Zero-initialized
@@ -933,16 +919,15 @@ static SDFormatResult zeroSectors(int fd, off_t startSector,
     uint32_t toWrite = std::min(remaining, kSectorsPerCluster);
     uint32_t bytes = toWrite * kSectorSize;
 
-    if (auto result = writeBytes(fd, offset, std::span{buffer, bytes});
-        result != SDFormatSuccess) {
-      return result;
+    if (int err = writeBytes(fd, offset, std::span{buffer, bytes}); err != 0) {
+      return err;
     }
 
     remaining -= toWrite;
     offset += bytes;
   }
 
-  return SDFormatSuccess;
+  return 0;
 }
 
 // =============================================================================
@@ -967,7 +952,7 @@ static SDFormatResult zeroSectors(int fd, off_t startSector,
 //   - Starting at sector 8192 (4 MB alignment)
 //   - Extending to the end of the device
 
-SDFormatResult sdFormatWriteMBR(int fd, uint64_t sectorCount) {
+int sdFormatWriteMBR(int fd, uint64_t sectorCount) {
   const MasterBootRecord mbr = {
       // bootstrap is implicitly zeroed (not a boot disk)
       .partitions =
@@ -1013,8 +998,8 @@ SDFormatResult sdFormatWriteMBR(int fd, uint64_t sectorCount) {
 // disaster recovery — if sector 0 of the partition becomes unreadable,
 // repair tools can restore the BPB from sector 6.
 
-SDFormatResult sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
-                                             const char* label) {
+int sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
+                                  const char* label) {
   // Prepare the 11-character volume label (uppercase, space-padded)
   auto volumeLabel = prepareVolumeLabel(label);
 
@@ -1040,9 +1025,8 @@ SDFormatResult sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
 
   // Write primary VBR to partition sector 0
   // Absolute LBA = kPartitionAlignmentSectors (8192)
-  if (auto result = writeSector(fd, kPartitionAlignmentSectors, vbr);
-      result != SDFormatSuccess) {
-    return result;
+  if (int err = writeSector(fd, kPartitionAlignmentSectors, vbr); err != 0) {
+    return err;
   }
 
   // Write backup VBR to partition sector 6
@@ -1062,7 +1046,7 @@ SDFormatResult sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
 //   - freeCount = total clusters - 1 (minus the root directory cluster)
 //   - nextFree = 3 (first cluster after root directory)
 
-SDFormatResult sdFormatWriteFSInfo(int fd, uint64_t sectorCount) {
+int sdFormatWriteFSInfo(int fd, uint64_t sectorCount) {
   // Construct FSInfo with computed free cluster count
   const FSInfo fsinfo = {
       .freeCount = freeClusterCount(sectorCount),
@@ -1071,10 +1055,10 @@ SDFormatResult sdFormatWriteFSInfo(int fd, uint64_t sectorCount) {
 
   // Write primary FSInfo to partition sector 1
   // Absolute LBA = kPartitionAlignmentSectors + kFsInfoSector (8193)
-  if (auto result =
+  if (int err =
           writeSector(fd, kPartitionAlignmentSectors + kFsInfoSector, fsinfo);
-      result != SDFormatSuccess) {
-    return result;
+      err != 0) {
+    return err;
   }
 
   // Write backup FSInfo to partition sector 7
@@ -1106,7 +1090,7 @@ SDFormatResult sdFormatWriteFSInfo(int fd, uint64_t sectorCount) {
 //     - Marks the root directory cluster as allocated
 //     - End-of-chain marker (root directory is one cluster)
 
-SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
+int sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
   // First sector of each FAT containing the three reserved entries.
   // The array is 128 uint32_t values (512 bytes = 1 sector).
   // Entries 0-2 are initialized; entries 3-127 are implicitly zero.
@@ -1128,23 +1112,20 @@ SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
   // ----- Primary FAT (FAT 1) -----
   // Location: kFatStartSector to kFatStartSector + fatSize - 1
 
-  if (auto result = zeroSectors(fd, kFatStartSector, fatSize);
-      result != SDFormatSuccess) {
-    return result;
+  if (int err = zeroSectors(fd, kFatStartSector, fatSize); err != 0) {
+    return err;
   }
 
   // Write reserved entries to first sector of FAT 1
-  if (auto result = writeSector(fd, kFatStartSector, fatSector);
-      result != SDFormatSuccess) {
-    return result;
+  if (int err = writeSector(fd, kFatStartSector, fatSector); err != 0) {
+    return err;
   }
 
   // ----- Backup FAT (FAT 2) -----
   // Location: kFatStartSector + fatSize to kFatStartSector + 2*fatSize - 1
 
-  if (auto result = zeroSectors(fd, kFatStartSector + fatSize, fatSize);
-      result != SDFormatSuccess) {
-    return result;
+  if (int err = zeroSectors(fd, kFatStartSector + fatSize, fatSize); err != 0) {
+    return err;
   }
 
   // Write reserved entries to first sector of FAT 2
@@ -1166,8 +1147,8 @@ SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
 // A freshly formatted volume has only this one entry; all others are free
 // (zeroed, with DIR_name[0] = 0x00 indicating the end of directory entries).
 
-SDFormatResult sdFormatWriteRootDirectory(int fd, uint64_t sectorCount,
-                                          const char* label) {
+int sdFormatWriteRootDirectory(int fd, uint64_t sectorCount,
+                               const char* label) {
   // Prepare the volume label (11 characters, uppercase, space-padded)
   auto volumeLabel = prepareVolumeLabel(label);
 
@@ -1175,9 +1156,8 @@ SDFormatResult sdFormatWriteRootDirectory(int fd, uint64_t sectorCount,
   uint32_t dataStart = dataStartSector(sectorCount);
 
   // Zero the entire first cluster of the data region
-  if (auto result = zeroSectors(fd, dataStart, kSectorsPerCluster);
-      result != SDFormatSuccess) {
-    return result;
+  if (int err = zeroSectors(fd, dataStart, kSectorsPerCluster); err != 0) {
+    return err;
   }
 
   // Create the root directory's first sector with the volume label entry

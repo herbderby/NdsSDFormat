@@ -38,24 +38,6 @@ extern "C" {
 #endif
 
 // -----------------------------------------------------------------------------
-// Result Codes
-// -----------------------------------------------------------------------------
-//
-// All public functions return an SDFormatResult indicating success or the
-// specific failure mode. Callers should check for SDFormatSuccess before
-// proceeding to the next formatting step.
-
-typedef enum {
-  SDFormatSuccess = 0,      // Operation completed without error
-  SDFormatAccessDenied,     // Permission denied writing to device
-  SDFormatDeviceBusy,       // Device is in use by another process
-  SDFormatInvalidDevice,    // Invalid file descriptor or device
-  SDFormatIOError,          // Read/write error during I/O operation
-  SDFormatTooSmall,         // Device is too small for FAT32 formatting
-  SDFormatUnknownError      // Catch-all for unexpected failures
-} SDFormatResult;
-
-// -----------------------------------------------------------------------------
 // Formatting Functions
 // -----------------------------------------------------------------------------
 //
@@ -65,6 +47,11 @@ typedef enum {
 //
 // The sectorCount parameter drives all layout calculations. For a device of
 // N bytes, sectorCount = N / 512.
+//
+// Return value:
+//   0 on success, or the errno value from the failed I/O operation.
+//   The caller is responsible for validating fd and sectorCount before
+//   calling these functions.
 
 // sdFormatWriteMBR
 // ----------------
@@ -81,7 +68,7 @@ typedef enum {
 //   - PE_chsStart/End = 0xFF 0xFF 0xFF (LBA mode indicator, required by macOS)
 //
 // See: docs/mbr_x86_design.md, docs/canonical_file_system.md §MBR
-SDFormatResult sdFormatWriteMBR(int fd, uint64_t sectorCount);
+int sdFormatWriteMBR(int fd, uint64_t sectorCount);
 
 // sdFormatWriteVolumeBootRecord
 // -----------------------------
@@ -103,8 +90,8 @@ SDFormatResult sdFormatWriteMBR(int fd, uint64_t sectorCount);
 // this function writes identical copies to both sectors.
 //
 // See: docs/canonical_file_system.md §VBR, docs/microsoft_fat_specification.md
-SDFormatResult sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
-                                             const char* label);
+int sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
+                                  const char* label);
 
 // sdFormatWriteFSInfo
 // -------------------
@@ -121,8 +108,9 @@ SDFormatResult sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
 // These values are advisory only. Per the Microsoft specification, filesystem
 // drivers should validate FSInfo contents against the actual FAT on mount.
 //
-// See: docs/canonical_file_system.md §FSInfo, docs/microsoft_fat_specification.md
-SDFormatResult sdFormatWriteFSInfo(int fd, uint64_t sectorCount);
+// See: docs/canonical_file_system.md §FSInfo,
+// docs/microsoft_fat_specification.md
+int sdFormatWriteFSInfo(int fd, uint64_t sectorCount);
 
 // sdFormatWriteFat32Tables
 // ------------------------
@@ -146,7 +134,7 @@ SDFormatResult sdFormatWriteFSInfo(int fd, uint64_t sectorCount);
 //   Backup FAT:    sectors [kFatStartSector + fatSize .. + 2*fatSize - 1]
 //
 // See: docs/canonical_file_system.md §FAT Region
-SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount);
+int sdFormatWriteFat32Tables(int fd, uint64_t sectorCount);
 
 // sdFormatWriteRootDirectory
 // --------------------------
@@ -166,8 +154,7 @@ SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount);
 // others prefer VBR_volumeLabel. Writing both ensures maximum compatibility.
 //
 // See: docs/canonical_file_system.md §Directory Entry
-SDFormatResult sdFormatWriteRootDirectory(int fd, uint64_t sectorCount,
-                                          const char* label);
+int sdFormatWriteRootDirectory(int fd, uint64_t sectorCount, const char* label);
 
 #ifdef __cplusplus
 }

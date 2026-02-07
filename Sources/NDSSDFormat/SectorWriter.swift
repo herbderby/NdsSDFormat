@@ -11,7 +11,7 @@ import NDSSDFormatCore
 /// let label = try VolumeLabel("NDS")
 /// let writer = try SectorWriter(
 ///   fd: handle.fileDescriptor,
-///   sectorCount: sectorCount,
+///   byteCount: deviceSize,
 ///   volumeLabel: label)
 /// try writer.writeMasterBootRecord()
 /// try writer.writeVolumeBootRecord()
@@ -28,41 +28,43 @@ public struct SectorWriter: Sendable {
 
   /// Total number of 512-byte sectors on the target device.
   ///
-  /// Every C formatting function receives this value so it can derive
-  /// partition geometry (FAT size, data region start, free clusters).
+  /// Derived from the byte count provided at initialization. Every C
+  /// formatting function receives this value so it can derive partition
+  /// geometry (FAT size, data region start, free clusters).
   private let sectorCount: UInt64
 
   /// The validated volume label written into the VBR and root directory.
   private let label: VolumeLabel
 
-  /// Minimum device size: 18 432 sectors (~9 MB).
+  /// Minimum device size: 512 MB (decimal).
   ///
-  /// Below this threshold the partition is too small to hold even the
-  /// reserved sectors, two FAT copies, and a single data cluster.
-  private static let minimumSectorCount: UInt64 = 18_432
+  /// SD cards use decimal sizing (1 MB = 1,000,000 bytes), so a
+  /// marketed "512 MB" card is 512,000,000 bytes. Devices smaller
+  /// than this are almost certainly not valid targets for formatting.
+  public static let minimumByteCount: UInt64 = 512_000_000
 
   /// Creates a sector writer for the given device.
   ///
   /// Validates all parameters before any I/O occurs:
   /// - The file descriptor must be positive.
-  /// - The device must have at least 18 432 sectors (~9 MB).
+  /// - The device must be at least 512 MB.
   ///
   /// - Parameters:
   ///   - fd: An open file descriptor with write permissions.
-  ///   - sectorCount: Total 512-byte sectors on the device.
+  ///   - byteCount: Total size of the device in bytes.
   ///   - volumeLabel: A validated ``VolumeLabel``.
   /// - Throws: ``FormatterError/invalidFileDescriptor`` if `fd` is
-  ///   not positive, or ``FormatterError/tooSmall`` if `sectorCount`
-  ///   is below the minimum.
-  public init(fd: Int32, sectorCount: UInt64, volumeLabel: VolumeLabel) throws(FormatterError) {
+  ///   not positive, or ``FormatterError/tooSmall(actual:minimum:)``
+  ///   if `byteCount` is below the minimum.
+  public init(fd: Int32, byteCount: UInt64, volumeLabel: VolumeLabel) throws(FormatterError) {
     guard fd > 0 else {
       throw .invalidFileDescriptor
     }
-    guard sectorCount >= Self.minimumSectorCount else {
-      throw .tooSmall
+    guard byteCount >= Self.minimumByteCount else {
+      throw .tooSmall(actual: byteCount, minimum: Self.minimumByteCount)
     }
     self.fd = fd
-    self.sectorCount = sectorCount
+    self.sectorCount = byteCount / 512
     self.label = volumeLabel
   }
 
@@ -103,17 +105,17 @@ public struct SectorWriter: Sendable {
 
   // MARK: - Private
 
-  /// Translates a C result code into a Swift typed throw.
+  /// Translates a C errno return into a Swift typed throw.
   ///
-  /// If `result` is `SDFormatSuccess` this method returns normally.
-  /// Any other value is converted to a ``FormatterError`` via
-  /// ``FormatterError/init(result:)`` and thrown.
+  /// If `errno` is 0 this method returns normally. Any non-zero value
+  /// is wrapped in ``FormatterError/ioError(_:)`` and thrown.
   ///
-  /// - Parameter result: The result code returned by a C formatting function.
-  /// - Throws: ``FormatterError`` mapped from the C result code.
-  private func check(_ result: SDFormatResult) throws(FormatterError) {
-    guard result == SDFormatSuccess else {
-      throw FormatterError(result: result)
+  /// - Parameter errno: The value returned by a C formatting function
+  ///   (0 on success, or an `errno` code on failure).
+  /// - Throws: ``FormatterError/ioError(_:)`` when `errno` is non-zero.
+  private func check(_ errno: Int32) throws(FormatterError) {
+    guard errno == 0 else {
+      throw FormatterError(errno: errno)
     }
   }
 }
