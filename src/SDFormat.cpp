@@ -66,7 +66,6 @@
 #include <cassert>
 #include <cctype>
 #include <ctime>
-#include <print>
 #include <span>
 #include <string_view>
 
@@ -922,9 +921,6 @@ static SDFormatResult zeroSectors(int fd, off_t startSector, uint32_t count) {
   uint32_t remaining = count;
   off_t current = startSector;
 
-  std::println("[SDFormat] Zeroing {} sectors starting at LBA {}", count,
-               static_cast<uint64_t>(startSector));
-
   while (remaining > 0) {
     // Write up to one cluster at a time
     uint32_t toWrite =
@@ -1038,7 +1034,6 @@ SDFormatResult sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
 
   // Write primary VBR to partition sector 0
   // Absolute LBA = kPartitionAlignmentSectors (8192)
-  std::println("[SDFormat] Writing VBR...");
   if (auto result = writeSectors(fd, kPartitionAlignmentSectors,
                                  std::as_bytes(std::span{&vbr, 1}));
       result != SDFormatSuccess) {
@@ -1047,7 +1042,6 @@ SDFormatResult sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
 
   // Write backup VBR to partition sector 6
   // Absolute LBA = kPartitionAlignmentSectors + kBackupBootSector (8198)
-  std::println("[SDFormat] Writing Backup VBR...");
   return writeSectors(fd, kPartitionAlignmentSectors + kBackupBootSector,
                       std::as_bytes(std::span{&vbr, 1}));
 }
@@ -1073,7 +1067,6 @@ SDFormatResult sdFormatWriteFSInfo(int fd, uint64_t sectorCount) {
 
   // Write primary FSInfo to partition sector 1
   // Absolute LBA = kPartitionAlignmentSectors + kFsInfoSector (8193)
-  std::println("[SDFormat] Writing FSInfo...");
   if (auto result = writeSectors(fd, kPartitionAlignmentSectors + kFsInfoSector,
                                  std::as_bytes(std::span{&fsinfo, 1}));
       result != SDFormatSuccess) {
@@ -1082,7 +1075,6 @@ SDFormatResult sdFormatWriteFSInfo(int fd, uint64_t sectorCount) {
 
   // Write backup FSInfo to partition sector 7
   // Absolute LBA = kPartitionAlignmentSectors + kBackupBootSector + 1 (8199)
-  std::println("[SDFormat] Writing Backup FSInfo...");
   return writeSectors(fd, kPartitionAlignmentSectors + kBackupBootSector + 1,
                       std::as_bytes(std::span{&fsinfo, 1}));
 }
@@ -1129,12 +1121,9 @@ SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
 
   uint32_t fatSize = fatSizeSectors(sectorCount);
 
-  std::println("[SDFormat] Initializing FAT tables...");
-
   // ----- Primary FAT (FAT 1) -----
   // Location: kFatStartSector to kFatStartSector + fatSize - 1
 
-  std::println("[SDFormat]   Zeroing FAT 1...");
   if (zeroSectors(fd, kFatStartSector, fatSize) != SDFormatSuccess) {
     return SDFormatIOError;
   }
@@ -1148,7 +1137,6 @@ SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
   // ----- Backup FAT (FAT 2) -----
   // Location: kFatStartSector + fatSize to kFatStartSector + 2*fatSize - 1
 
-  std::println("[SDFormat]   Zeroing FAT 2...");
   if (zeroSectors(fd, kFatStartSector + fatSize, fatSize) != SDFormatSuccess) {
     return SDFormatIOError;
   }
@@ -1184,9 +1172,6 @@ SDFormatResult sdFormatWriteRootDirectory(int fd, uint64_t sectorCount,
 
   // Calculate the absolute LBA of cluster 2 (root directory)
   uint32_t dataStart = dataStartSector(sectorCount);
-
-  std::println("[SDFormat] Initializing Root Directory...");
-  std::println("[SDFormat]   Zeroing Root Directory Cluster...");
 
   // Zero the entire first cluster of the data region
   if (zeroSectors(fd, dataStart, kSectorsPerCluster) != SDFormatSuccess) {
