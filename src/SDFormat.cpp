@@ -839,13 +839,17 @@ static uint32_t freeClusterCount(uint64_t sectorCount) {
 //   data:   Span of bytes to write
 //
 // Returns:
-//   SDFormatSuccess on successful write
-//   SDFormatInvalidDevice if fd is invalid or data is empty
+//   SDFormatSuccess on successful write (or if data is empty)
+//   SDFormatInvalidDevice if fd is invalid
 //   SDFormatIOError on seek or write failure
 
 static SDFormatResult writeBytes(int fd, off_t offset,
                                  std::span<const std::byte> data) {
-  if (fd < 0 || data.empty()) {
+  if (data.empty()) {
+    return SDFormatSuccess;
+  }
+
+  if (fd < 0) {
     return SDFormatInvalidDevice;
   }
 
@@ -875,25 +879,28 @@ static SDFormatResult writeBytes(int fd, off_t offset,
   return SDFormatSuccess;
 }
 
-// writeSectors
-// ------------
-// Writes data to a specific sector (LBA) on the device.
+// writeSector
+// -----------
+// Writes a single 512-byte structure to a specific LBA on the device.
 //
-// Converts the sector number to a byte offset and delegates to writeBytes.
+// Accepts any type that is exactly kSectorSize bytes, enforced at compile
+// time via static_assert. Converts the sector number to a byte offset and
+// delegates to writeBytes.
 //
 // Parameters:
 //   fd:        File descriptor open for writing
 //   sectorLba: Logical Block Address (sector number, 0-based)
-//   data:      Span of bytes to write (should be a multiple of 512)
+//   sector:    Reference to a 512-byte structure to write
 //
 // Returns:
 //   SDFormatSuccess on successful write
 //   SDFormatIOError on I/O failure
 
-static SDFormatResult writeSectors(int fd, off_t sectorLba,
-                                   std::span<const std::byte> data) {
+template <typename T>
+static SDFormatResult writeSector(int fd, off_t sectorLba, const T& sector) {
+  static_assert(sizeof(T) == kSectorSize);
   off_t offset = sectorLba * kSectorSize;
-  return writeBytes(fd, offset, data);
+  return writeBytes(fd, offset, std::as_bytes(std::span{&sector, 1}));
 }
 
 // zeroSectors
@@ -906,34 +913,33 @@ static SDFormatResult writeSectors(int fd, off_t sectorLba,
 // Parameters:
 //   fd:          File descriptor open for writing
 //   startSector: First sector (LBA) to zero
-//   count:       Number of sectors to zero
+//   sectorCount: Number of sectors to zero
 //
 // Returns:
 //   SDFormatSuccess if all sectors zeroed successfully
 //   SDFormatIOError on I/O failure
 
-static SDFormatResult zeroSectors(int fd, off_t startSector, uint32_t count) {
+static SDFormatResult zeroSectors(int fd, off_t startSector,
+                                  uint32_t sectorCount) {
   // Use a cluster-sized buffer for efficient bulk zeroing
-  static constexpr uint32_t kClusterSectors = kSectorsPerCluster;
-  static constexpr uint32_t kClusterBytes = kClusterSectors * kSectorSize;
+  static constexpr uint32_t kClusterBytes = kSectorsPerCluster * kSectorSize;
   std::byte buffer[kClusterBytes] = {};  // Zero-initialized
 
-  uint32_t remaining = count;
-  off_t current = startSector;
+  off_t offset = startSector * kSectorSize;
+  uint32_t remaining = sectorCount;
 
   while (remaining > 0) {
     // Write up to one cluster at a time
-    uint32_t toWrite =
-        (remaining > kClusterSectors) ? kClusterSectors : remaining;
+    uint32_t toWrite = std::min(remaining, kSectorsPerCluster);
+    uint32_t bytes = toWrite * kSectorSize;
 
-    if (auto result =
-            writeSectors(fd, current, std::span{buffer, toWrite * kSectorSize});
+    if (auto result = writeBytes(fd, offset, std::span{buffer, bytes});
         result != SDFormatSuccess) {
       return result;
     }
 
     remaining -= toWrite;
-    current += toWrite;
+    offset += bytes;
   }
 
   return SDFormatSuccess;
@@ -962,33 +968,34 @@ static SDFormatResult zeroSectors(int fd, off_t startSector, uint32_t count) {
 //   - Extending to the end of the device
 
 SDFormatResult sdFormatWriteMBR(int fd, uint64_t sectorCount) {
-  // Start with a zeroed 512-byte buffer
-  std::byte masterBootRecord[512] = {};
-  MasterBootRecord* mbr = reinterpret_cast<MasterBootRecord*>(masterBootRecord);
+  const MasterBootRecord mbr = {
+      // bootstrap is implicitly zeroed (not a boot disk)
+      .partitions =
+          {
+              PartitionEntry{
+                  .status = 0x80,  // Active/bootable partition
 
-  // Configure the first (and only) partition entry
-  mbr->partitions[0] = PartitionEntry{
-      .status = 0x80,  // Active/bootable partition
+                  // CHS values set to 0xFF for LBA mode (required by macOS)
+                  .chsStart = {0xFF, 0xFF, 0xFF},
 
-      // CHS values set to 0xFF for LBA mode (required by macOS)
-      .chsStart = {0xFF, 0xFF, 0xFF},
+                  .type = kPartitionTypeFat32Lba,  // 0x0C = FAT32 with LBA
 
-      .type = kPartitionTypeFat32Lba,  // 0x0C = FAT32 with LBA
+                  .chsEnd = {0xFF, 0xFF, 0xFF},
 
-      .chsEnd = {0xFF, 0xFF, 0xFF},
+                  // Partition starts at 4 MB boundary (8192 sectors)
+                  .lbaStart = kPartitionAlignmentSectors,
 
-      // Partition starts at 4 MB boundary (8192 sectors)
-      .lbaStart = kPartitionAlignmentSectors,
-
-      // Partition extends to the end of the device
-      .sectorCount = static_cast<uint32_t>(partitionSectorCount(sectorCount)),
+                  // Partition extends to the end of the device
+                  .sectorCount =
+                      static_cast<uint32_t>(partitionSectorCount(sectorCount)),
+              },
+              // partitions[1–3] are implicitly zeroed (unused)
+          },
+      .signature = kMbrSignature,  // 0xAA55
   };
 
-  // Set the MBR boot signature
-  mbr->signature = kMbrSignature;  // 0xAA55
-
   // Write to sector 0 (absolute LBA 0)
-  return writeSectors(fd, 0, std::span{masterBootRecord});
+  return writeSector(fd, 0, mbr);
 }
 
 // sdFormatWriteVolumeBootRecord
@@ -1033,16 +1040,14 @@ SDFormatResult sdFormatWriteVolumeBootRecord(int fd, uint64_t sectorCount,
 
   // Write primary VBR to partition sector 0
   // Absolute LBA = kPartitionAlignmentSectors (8192)
-  if (auto result = writeSectors(fd, kPartitionAlignmentSectors,
-                                 std::as_bytes(std::span{&vbr, 1}));
+  if (auto result = writeSector(fd, kPartitionAlignmentSectors, vbr);
       result != SDFormatSuccess) {
     return result;
   }
 
   // Write backup VBR to partition sector 6
   // Absolute LBA = kPartitionAlignmentSectors + kBackupBootSector (8198)
-  return writeSectors(fd, kPartitionAlignmentSectors + kBackupBootSector,
-                      std::as_bytes(std::span{&vbr, 1}));
+  return writeSector(fd, kPartitionAlignmentSectors + kBackupBootSector, vbr);
 }
 
 // sdFormatWriteFSInfo
@@ -1066,16 +1071,16 @@ SDFormatResult sdFormatWriteFSInfo(int fd, uint64_t sectorCount) {
 
   // Write primary FSInfo to partition sector 1
   // Absolute LBA = kPartitionAlignmentSectors + kFsInfoSector (8193)
-  if (auto result = writeSectors(fd, kPartitionAlignmentSectors + kFsInfoSector,
-                                 std::as_bytes(std::span{&fsinfo, 1}));
+  if (auto result =
+          writeSector(fd, kPartitionAlignmentSectors + kFsInfoSector, fsinfo);
       result != SDFormatSuccess) {
     return result;
   }
 
   // Write backup FSInfo to partition sector 7
   // Absolute LBA = kPartitionAlignmentSectors + kBackupBootSector + 1 (8199)
-  return writeSectors(fd, kPartitionAlignmentSectors + kBackupBootSector + 1,
-                      std::as_bytes(std::span{&fsinfo, 1}));
+  return writeSector(fd, kPartitionAlignmentSectors + kBackupBootSector + 1,
+                     fsinfo);
 }
 
 // sdFormatWriteFat32Tables
@@ -1129,8 +1134,7 @@ SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
   }
 
   // Write reserved entries to first sector of FAT 1
-  if (auto result = writeSectors(fd, kFatStartSector,
-                                 std::as_bytes(std::span{fatSector}));
+  if (auto result = writeSector(fd, kFatStartSector, fatSector);
       result != SDFormatSuccess) {
     return result;
   }
@@ -1144,8 +1148,7 @@ SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
   }
 
   // Write reserved entries to first sector of FAT 2
-  return writeSectors(fd, kFatStartSector + fatSize,
-                      std::as_bytes(std::span{fatSector}));
+  return writeSector(fd, kFatStartSector + fatSize, fatSector);
 }
 
 // sdFormatWriteRootDirectory
@@ -1189,6 +1192,5 @@ SDFormatResult sdFormatWriteRootDirectory(int fd, uint64_t sectorCount,
   };
 
   // Write the volume label entry to the first sector of the root directory
-  return writeSectors(fd, dataStart,
-                      std::as_bytes(std::span{&rootDirSector, 1}));
+  return writeSector(fd, dataStart, rootDirSector);
 }
