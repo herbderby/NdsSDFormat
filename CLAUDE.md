@@ -23,8 +23,11 @@ SPM product: `NDSSDFormatCore`
 ## Build Commands
 
 ```bash
-# Full build (library + FormatImage CLI + test runner)
+# Makefile build (library + FormatImage CLI + test runner)
 make all
+
+# SPM build (library only, for downstream Swift consumers)
+swift build
 
 # Run integration tests (4GB, 8GB, 16GB, 32GB, 64GB)
 ./build/test_runner
@@ -38,6 +41,10 @@ clang-format -i include/*.h src/*.cpp tools/*.cpp tests/*.cpp
 # Clean
 make clean
 ```
+
+Both build systems enforce `-Wall -Wextra -Wpedantic -Werror`.
+The Makefile sets these in `CXXFLAGS`; Package.swift sets them in
+`cxxSettings` via `.unsafeFlags`.
 
 ## Directory Structure
 

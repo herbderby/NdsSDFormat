@@ -15,7 +15,13 @@ let package = Package(
             sources: ["src/SDFormat.cpp"],
             publicHeadersPath: "include",
             cxxSettings: [
-                .unsafeFlags(["-std=c++23"])
+                .unsafeFlags([
+                    "-std=c++23",
+                    "-Wall",
+                    "-Wextra",
+                    "-Wpedantic",
+                    "-Werror",
+                ])
             ]
         )
     ]
