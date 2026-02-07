@@ -926,11 +926,10 @@ static SDFormatResult zeroSectors(int fd, off_t startSector, uint32_t count) {
     uint32_t toWrite =
         (remaining > kClusterSectors) ? kClusterSectors : remaining;
 
-    SDFormatResult res =
-        writeSectors(fd, current, std::span{buffer, toWrite * kSectorSize});
-
-    if (res != SDFormatSuccess) {
-      return res;
+    if (auto result =
+            writeSectors(fd, current, std::span{buffer, toWrite * kSectorSize});
+        result != SDFormatSuccess) {
+      return result;
     }
 
     remaining -= toWrite;
@@ -1124,30 +1123,29 @@ SDFormatResult sdFormatWriteFat32Tables(int fd, uint64_t sectorCount) {
   // ----- Primary FAT (FAT 1) -----
   // Location: kFatStartSector to kFatStartSector + fatSize - 1
 
-  if (zeroSectors(fd, kFatStartSector, fatSize) != SDFormatSuccess) {
-    return SDFormatIOError;
+  if (auto result = zeroSectors(fd, kFatStartSector, fatSize);
+      result != SDFormatSuccess) {
+    return result;
   }
 
   // Write reserved entries to first sector of FAT 1
-  if (writeSectors(fd, kFatStartSector, std::as_bytes(std::span{fatSector})) !=
-      SDFormatSuccess) {
-    return SDFormatIOError;
+  if (auto result = writeSectors(fd, kFatStartSector,
+                                 std::as_bytes(std::span{fatSector}));
+      result != SDFormatSuccess) {
+    return result;
   }
 
   // ----- Backup FAT (FAT 2) -----
   // Location: kFatStartSector + fatSize to kFatStartSector + 2*fatSize - 1
 
-  if (zeroSectors(fd, kFatStartSector + fatSize, fatSize) != SDFormatSuccess) {
-    return SDFormatIOError;
+  if (auto result = zeroSectors(fd, kFatStartSector + fatSize, fatSize);
+      result != SDFormatSuccess) {
+    return result;
   }
 
   // Write reserved entries to first sector of FAT 2
-  if (writeSectors(fd, kFatStartSector + fatSize,
-                   std::as_bytes(std::span{fatSector})) != SDFormatSuccess) {
-    return SDFormatIOError;
-  }
-
-  return SDFormatSuccess;
+  return writeSectors(fd, kFatStartSector + fatSize,
+                      std::as_bytes(std::span{fatSector}));
 }
 
 // sdFormatWriteRootDirectory
@@ -1174,8 +1172,9 @@ SDFormatResult sdFormatWriteRootDirectory(int fd, uint64_t sectorCount,
   uint32_t dataStart = dataStartSector(sectorCount);
 
   // Zero the entire first cluster of the data region
-  if (zeroSectors(fd, dataStart, kSectorsPerCluster) != SDFormatSuccess) {
-    return SDFormatIOError;
+  if (auto result = zeroSectors(fd, dataStart, kSectorsPerCluster);
+      result != SDFormatSuccess) {
+    return result;
   }
 
   // Create the root directory's first sector with the volume label entry
@@ -1190,11 +1189,6 @@ SDFormatResult sdFormatWriteRootDirectory(int fd, uint64_t sectorCount,
   };
 
   // Write the volume label entry to the first sector of the root directory
-  if (writeSectors(fd, dataStart,
-                   std::as_bytes(std::span{&rootDirSector, 1})) !=
-      SDFormatSuccess) {
-    return SDFormatIOError;
-  }
-
-  return SDFormatSuccess;
+  return writeSectors(fd, dataStart,
+                      std::as_bytes(std::span{&rootDirSector, 1}));
 }
