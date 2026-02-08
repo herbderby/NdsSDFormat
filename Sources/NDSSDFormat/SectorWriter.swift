@@ -36,18 +36,22 @@ public struct SectorWriter: Sendable {
   /// The validated volume label written into the VBR and root directory.
   private let label: VolumeLabel
 
-  /// Minimum device size: 500 MB.
+  /// Minimum device size: 2 GiB + 8 MB.
   ///
-  /// Marketed "512 MB" SD cards report ~503 MB actual capacity,
-  /// so the threshold is set below that to avoid rejecting real
-  /// cards at the low end.
-  public static let minimumByteCount: UInt64 = 500_000_000
+  /// FAT32 with 32KB clusters (required for DS flashcart compatibility)
+  /// needs at least 65,525 clusters. The data region alone requires
+  /// 2^16 clusters × 2^15 bytes/cluster = 2^31 bytes, plus overhead
+  /// for the 4 MB partition alignment, reserved sectors, and two FAT
+  /// copies. The extra 2^23 bytes (8 MB) covers this overhead.
+  /// Marketed "2 GB" cards report ~2.01 GB and fall short; the next
+  /// standard size (4 GB) reports ~3.6 GB and works fine.
+  public static let minimumByteCount: UInt64 = (1 << 31) + (1 << 23)
 
   /// Creates a sector writer for the given device.
   ///
   /// Validates all parameters before any I/O occurs:
   /// - The file descriptor must be positive.
-  /// - The device must be at least 512 MB.
+  /// - The device must be at least 2 GiB.
   ///
   /// - Parameters:
   ///   - fd: An open file descriptor with write permissions.
