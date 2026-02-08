@@ -11,6 +11,17 @@ let package = Package(
     .library(
       name: "NDSSDFormat",
       targets: ["NDSSDFormat"]),
+    .executable(
+      name: "SDFormat",
+      targets: ["SDFormat"]),
+  ],
+  dependencies: [
+    .package(
+      url: "https://github.com/apple/swift-argument-parser",
+      from: "1.3.0"),
+    .package(
+      url: "https://github.com/apple/swift-log.git",
+      from: "1.6.1"),
   ],
   targets: [
     .target(
@@ -32,6 +43,19 @@ let package = Package(
       name: "NDSSDFormat",
       dependencies: ["NDSSDFormatCore"],
       path: "Sources/NDSSDFormat",
+      swiftSettings: [
+        .swiftLanguageMode(.v6),
+        .enableExperimentalFeature("StrictConcurrency"),
+      ]
+    ),
+    .executableTarget(
+      name: "SDFormat",
+      dependencies: [
+        "NDSSDFormat",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        .product(name: "Logging", package: "swift-log"),
+      ],
+      path: "Sources/SDFormat",
       swiftSettings: [
         .swiftLanguageMode(.v6),
         .enableExperimentalFeature("StrictConcurrency"),

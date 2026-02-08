@@ -14,6 +14,12 @@ public enum FormatterError: Error, Equatable, Sendable {
   case tooSmall(actual: UInt64, minimum: UInt64)
   /// A system call failed during I/O. The associated value is `errno`.
   case ioError(Int32)
+  /// The path could not be accessed (e.g., permission denied on `stat`).
+  case accessDenied
+  /// The device could not be queried or has an unexpected block size.
+  case invalidDevice
+  /// The device could not be unmounted (e.g., another process holds it open).
+  case deviceBusy
 
   /// Creates a `FormatterError` from an `errno` value returned by a
   /// C formatting function.
@@ -35,6 +41,12 @@ public enum FormatterError: Error, Equatable, Sendable {
       "Device too small: \(actual) bytes, need at least \(minimum) bytes"
     case .ioError(let code):
       "I/O error: \(String(cString: strerror(code))) (errno: \(code))"
+    case .accessDenied:
+      "Access denied: cannot stat the target path"
+    case .invalidDevice:
+      "Invalid device: cannot query capacity or unexpected block size"
+    case .deviceBusy:
+      "Device busy: unmount failed"
     }
   }
 }

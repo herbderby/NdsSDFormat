@@ -36,12 +36,12 @@ public struct SectorWriter: Sendable {
   /// The validated volume label written into the VBR and root directory.
   private let label: VolumeLabel
 
-  /// Minimum device size: 512 MB (decimal).
+  /// Minimum device size: 500 MB.
   ///
-  /// SD cards use decimal sizing (1 MB = 1,000,000 bytes), so a
-  /// marketed "512 MB" card is 512,000,000 bytes. Devices smaller
-  /// than this are almost certainly not valid targets for formatting.
-  public static let minimumByteCount: UInt64 = 512_000_000
+  /// Marketed "512 MB" SD cards report ~503 MB actual capacity,
+  /// so the threshold is set below that to avoid rejecting real
+  /// cards at the low end.
+  public static let minimumByteCount: UInt64 = 500_000_000
 
   /// Creates a sector writer for the given device.
   ///

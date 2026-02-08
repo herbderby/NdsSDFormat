@@ -10,15 +10,8 @@ targeting Nintendo DS flashcarts (R4i, Acekard). Constructs MBR +
 FAT32 filesystem structures with 32KB clusters and 4MB alignment,
 ensuring bit-perfect compatibility with ARM9 bootloaders.
 
-This is **Repo 1** of a 2-repo dependency chain:
-
-```text
-herbderby/NDSFlashcartFormatter (App)
-  depends on -> herbderby/NdsSDFormat (this repo, C++ library + Swift wrapper)
-```
-
 SPM products: `NDSSDFormatCore` (C++ library),
-`NDSSDFormat` (Swift wrapper)
+`NDSSDFormat` (Swift wrapper), `SDFormat` (CLI executable)
 
 ## Build Commands
 
@@ -26,8 +19,12 @@ SPM products: `NDSSDFormatCore` (C++ library),
 # Makefile build (library + FormatImage CLI + test runner)
 make all
 
-# SPM build (library only, for downstream Swift consumers)
+# SPM build (library + CLI)
 swift build
+
+# Run the Swift CLI (device mode is default, --file for images)
+swift run SDFormat /dev/rdisk4 NDSFAT32
+swift run SDFormat test.img TESTLBL --file
 
 # Run integration tests (4GB, 8GB, 16GB, 32GB, 64GB)
 ./build/test_runner
@@ -58,16 +55,20 @@ NdsSDFormat/
 ├── src/
 │   └── SDFormat.cpp       # C++ implementation
 ├── Sources/
-│   └── NDSSDFormat/       # Swift wrapper (SPM target)
-│       ├── FormatterError.swift  # Error enum mapping C result codes
-│       └── SectorWriter.swift    # Throwing wrapper around C functions
+│   ├── NDSSDFormat/       # Swift wrapper (SPM target)
+│   │   ├── FormatterError.swift  # Error enum mapping C result codes
+│   │   ├── SectorWriter.swift    # Throwing wrapper around C functions
+│   │   └── VolumeLabel.swift     # Validated FAT32 volume label
+│   └── SDFormat/          # Swift CLI executable (SPM target)
+│       ├── SDFormat.swift        # ArgumentParser entry point
+│       └── SDCardManager.swift   # Device capacity + unmount
 ├── tools/
 │   └── FormatImage.cpp    # Minimal C++ CLI for testing
 ├── tests/
 │   └── integration_runner.cpp  # hdiutil/fsck/mount tests
 ├── .clang-format      # Shared clang-format config (from SD_Card_Formatter)
 ├── Makefile           # C++ build (library + tools + tests)
-└── Package.swift      # SPM: NDSSDFormatCore (C++) + NDSSDFormat (Swift)
+└── Package.swift      # SPM: NDSSDFormatCore (C++) + NDSSDFormat (Swift) + SDFormat (CLI)
 ```
 
 ## Architecture
@@ -166,7 +167,10 @@ applicable so the docs stay connected.
 
 ## Key Technical Details
 
-- Cluster size is always 32KB (critical for DS flashcart compatibility)
+- Cluster size is always 32KB (critical for DS flashcart compatibility).
+  With 32KB clusters, FAT32 requires at least 65,525 clusters (~2.1 GB
+  data region). Cards smaller than ~2 GB produce fewer clusters than
+  the FAT32 threshold and are classified as FAT16 by the MS spec.
 - 4MB (8192 sectors) alignment for NAND flash optimization
 - FAT[0] and FAT[1] must have high bits set (clean shutdown + no
   error flags)
@@ -188,10 +192,8 @@ applicable so the docs stay connected.
   Without this, SPM defaults to a deployment target too low for
   C++23 `<print>` (which uses `std::to_chars` internally, unavailable
   before macOS 13.3).
-- The `NDSSDFormat` Swift wrapper is consumed directly by
-  `NDSFlashcartFormatter` via
-  `.package(url: "https://github.com/herbderby/NdsSDFormat.git",
-  from: "3.0.0")`.
+- The `SDFormat` executable uses `swift-argument-parser` for CLI
+  parsing and `swift-log` for stage logging.
 - Never re-tag a released version. SPM caches commit hashes per tag
   and will refuse to resolve if the hash changes. Always bump the
   version number.
@@ -207,7 +209,7 @@ across multiple SD card sizes:
 4. Verify filesystem integrity with `fsck_msdos`
 5. Verify mountability with `diskutil mount`
 
-All 5 sizes (4GB, 8GB, 16GB, 32GB, 64GB) pass as of 2026-01-31.
+All 5 sizes (4GB, 8GB, 16GB, 32GB, 64GB) pass as of 2026-02-07.
 Tests do not require `sudo`.
 
 ## Next Steps
