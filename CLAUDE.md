@@ -22,8 +22,11 @@ make all
 # SPM build (library + CLI)
 swift build
 
-# Run the Swift CLI (device mode is default, --file for images)
-swift run SDFormat /dev/rdisk4 NDSFAT32
+# Run the Swift CLI (device mode needs sudo for raw device access)
+swift build
+sudo .build/debug/SDFormat /dev/rdisk4 NDSFAT32
+
+# File mode (no sudo needed)
 swift run SDFormat test.img TESTLBL --file
 
 # Run integration tests (4GB, 8GB, 16GB, 32GB, 64GB)
